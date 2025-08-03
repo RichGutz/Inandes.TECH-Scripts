@@ -4,6 +4,7 @@ import os
 import pdf_parser
 import datetime
 import pdf_generator # Importar el módulo pdf_generator
+import variable_data_pdf_generator # Importar el nuevo módulo para generar PDF de variables
 
 API_BASE_URL = "http://127.0.0.1:8000" # <<< ¡IMPORTANTE! Reemplaza esto con tu URL de ngrok
 
@@ -393,16 +394,26 @@ st.markdown("---")
 gr_title_col, gr_cot_btn_col, gr_prop_btn_col = st.columns([0.4, 0.3, 0.3])
 with gr_title_col:
     st.write("#### Paso 3: Grabar Documento")
-with gr_cot_btn_col:
-    if st.button("GRABAR Cotización", disabled=not st.session_state.recalculate_result, key="grabar_cotizacion_btn"):
-        with st.spinner("Grabando Cotización..."):
-            pdf_data = prepare_pdf_data("Cotizacion")
-            save_proforma_to_supabase(pdf_data)
+ 
 with gr_prop_btn_col:
     if st.button("GRABAR Propuesta", disabled=not st.session_state.recalculate_result, key="grabar_propuesta_btn"):
-        with st.spinner("Grabando Propuesta..."):
-            pdf_data = prepare_pdf_data("Propuesta")
-            save_proforma_to_supabase(pdf_data)
+        with st.spinner("Generando PDF de variables..."):
+            # Recopilar todas las variables relevantes del session_state
+            all_vars = {
+                key: value for key, value in st.session_state.items()
+                if not key.startswith("pdf_uploader") and key not in ["initial_calc_result", "recalculate_result"]
+            }
+
+            # Añadir resultados de los cálculos si existen
+            if st.session_state.initial_calc_result:
+                all_vars["initial_calc_result"] = st.session_state.initial_calc_result
+            if st.session_state.recalculate_result:
+                all_vars["recalculate_result"] = st.session_state.recalculate_result
+
+            output_filename = f"Variables_Propuesta_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"
+            output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", output_filename)
+            variable_data_pdf_generator.generate_variable_pdf(all_vars, output_filepath)
+            st.success(f"PDF de variables generado en: {output_filepath}")
 
 st.markdown("---")
 
@@ -410,13 +421,7 @@ st.markdown("---")
 imp_title_col, imp_cot_btn_col, imp_prop_btn_col = st.columns([0.4, 0.3, 0.3])
 with imp_title_col:
     st.write("#### Paso 4: Imprimir Documento")
-with imp_cot_btn_col:
-    if st.button("IMPRIMIR Cotización", disabled=not st.session_state.recalculate_result, key="imprimir_cotizacion_btn"):
-        with st.spinner("Generando Cotización para impresión..."):
-            pdf_data = prepare_pdf_data("Cotizacion")
-            output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", f"Cotizacion_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf")
-            pdf_generator.generate_pdf(output_filepath, pdf_data)
-            st.success(f"Cotización generada para impresión en: {output_filepath}")
+ 
 with imp_prop_btn_col:
     if st.button("IMPRIMIR Propuesta", disabled=not st.session_state.recalculate_result, key="imprimir_propuesta_btn"):
         with st.spinner("Generando Propuesta para impresión..."):

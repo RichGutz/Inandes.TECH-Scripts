@@ -43,11 +43,7 @@ def generate_pdf(output_filepath, data):
 
     # Left column content (Main Title + Client Info)
     left_column_content = []
-    document_type = data.get('tipo_documento', '')
-    main_title = "FONDO NSG MIPYME - INANDES FACTOR CAPITAL S.A.C."
-    if document_type:
-        main_title = f"{document_type.upper()} - {main_title}"
-    left_column_content.append(Paragraph(f"<b>{main_title}</b>", styles['LeftAlign']))
+    left_column_content.append(Paragraph("<b>FONDO NSG MIPYME - INANDES FACTOR CAPITAL S.A.C.</b>", styles['LeftAlign']))
     left_column_content.append(Spacer(1, 0.1 * inch))
 
     client_info_data = [
@@ -557,130 +553,73 @@ def generate_pdf(output_filepath, data):
         print(f"Foxit Reader not found at {foxit_reader_path}. Please update the path in pdf_generator.py or open the PDF manually.")
 
 if __name__ == '__main__':
-    def generate_random_dummy_data(iteration):
-        # Base data
+    def generate_variable_map_data():
+        # This function creates a dictionary where the values are the proposed variable names
         data = {
-            "contract_name": "CONTRATO DE FACTORING",
-            "client_name": random.choice(["MILENIO CONSULTORES SAC", "TECH SOLUTIONS S.A.C.", "GLOBAL INNOVATIONS E.I.R.L."]),
-            "client_ruc": str(random.randint(10000000000, 99999999999)),
-            "relation_type": random.choice(["FACTURA(S)", "BOLETA(S)", "RECIBO(S)"]),
-            "anexo_number": str(random.randint(1, 100)),
-            "document_date": datetime.datetime.now().strftime("%A %d, %b, %Y").upper(),
-            "facturas_comision": [],
-            "facturas_descuento": [],
-            "signatures": [],
+            'contract_name': 'contract_name',
+            'en': 'en',
+            'er': 'er',
+            'relation_type': 'relation_type',
+            'numero_anexo': 'numero_anexo',
+            'fecha_documento': 'fecha_documento',
+            'facturas': [
+                {
+                    'nro_factura': 'nro_factura',
+                    'fp_calc': 'fp_calc',
+                    'fd': 'fd',
+                    'po_calc': 'po_calc',
+                    'en': 'en',
+                    'an': 'an',
+                    'mfn': 'mfn',
+                    'detraccion_retencion_calc': 'detraccion_retencion_calc',
+                }
+            ],
+            'total_monto_neto': 'total_monto_neto',
+            'detracciones_total': 'detracciones_total',
+            'total_neto': 'total_neto',
+            'descuentos': [
+                {
+                    'nro_factura': 'nro_factura',
+                    'capital': 'capital',
+                    'interes': 'interes',
+                    'igv_interes': 'igv_interes',
+                    'abono_real_calculado': 'abono_real_calculado',
+                }
+            ],
+            'total_base_descuento': 'total_base_descuento',
+            'total_interes_cobrado': 'total_interes_cobrado',
+            'total_igv_descuento': 'total_igv_descuento',
+            'total_abono': 'total_abono',
+            'margen_seguridad': 'margen_seguridad',
+            'comision_total_con_igv': 'comision_total_con_igv',
+            'monto_desembolsado': 'monto_desembolsado',
+            'interes': 'interes',
+            'igv_interes': 'igv_interes',
+            'comision': 'comision',
+            'igv_comision': 'igv_comision',
+            'imprimir_comision_afiliacion': True,
+            'comision_afiliacion_comision': 'comision_afiliacion_comision',
+            'comision_afiliacion_igv': 'comision_afiliacion_igv',
+            'comision_afiliacion_total': 'comision_afiliacion_total',
+            'intereses_adicionales_int': 'intereses_adicionales_int',
+            'intereses_adicionales_igv': 'intereses_adicionales_igv',
+            'intereses_adicionales_total': 'intereses_adicionales_total',
+            'signatures': [
+                {'name': 'signature_name_1', 'dni': 'signature_dni_1', 'role': 'signature_role_1'},
+                {'name': 'signature_name_2', 'dni': 'signature_dni_2', 'role': 'signature_role_2'},
+                {'name': 'signature_name_3', 'dni': 'signature_dni_3', 'role': 'signature_role_3'},
+                {'name': 'signature_name_4', 'dni': 'signature_dni_4', 'role': 'signature_role_4'},
+                {'name': 'signature_name_5', 'dni': 'signature_dni_5', 'role': 'signature_role_5'},
+            ]
         }
-
-        # Generate random facturas_comision
-        num_facturas_comision = random.randint(1, 5) # Vary number of rows
-        total_monto_neto = 0.0
-        total_detracciones = 0.0
-        for i in range(num_facturas_comision):
-            monto = round(random.uniform(10000.00, 50000.00), 2)
-            detraccion_rate = random.choice([2.0, 4.0, 6.0])
-            detraccion_amount = round(monto * (detraccion_rate / 100), 2)
-            total_monto_neto += monto
-            total_detracciones += detraccion_amount
-
-            data["facturas_comision"].append({
-                "nro_factura": f"E001-{random.randint(100000, 999999)}",
-                "fecha_vencimiento": (datetime.date.today() + datetime.timedelta(days=random.randint(10, 90))).strftime("%d %b, %Y"),
-                "fecha_desembolso": (datetime.date.today() - datetime.timedelta(days=random.randint(5, 30))).strftime("%d %b, %Y"),
-                "dias": random.randint(10, 90),
-                "girador": random.choice(["PROVEEDOR A", "PROVEEDOR B", "PROVEEDOR C"]),
-                "aceptante": random.choice(["CLIENTE X", "CLIENTE Y", "CLIENTE Z"]),
-                "monto_neto": f"{monto:,.2f}",
-                "detraccion_retencion": f"{detraccion_rate}",
-            })
-        data["total_monto_neto"] = f"{total_monto_neto:,.2f}"
-        data["detracciones_total"] = f"{total_detracciones:,.2f}"
-        data["total_neto"] = f"{total_monto_neto - total_detracciones:,.2f}"
-
-        # Generate random facturas_descuento (matching num_facturas_comision for simplicity)
-        total_base_descuento = 0.0
-        total_interes_cobrado = 0.0
-        total_igv_descuento = 0.0
-        total_abono = 0.0
-        for i in range(num_facturas_comision): # Use same number of rows as facturas_comision
-            base_desc = round(random.uniform(9000.00, 45000.00), 2)
-            interes_cob = round(random.uniform(100.00, 1000.00), 2)
-            igv_val = round(interes_cob * 0.18, 2) # Assuming 18% IGV
-            abono_val = round(base_desc - interes_cob - igv_val, 2)
-            
-            total_base_descuento += base_desc
-            total_interes_cobrado += interes_cob
-            total_igv_descuento += igv_val
-            total_abono += abono_val
-
-            data["facturas_descuento"].append({
-                "nro_factura": data["facturas_comision"][i]["nro_factura"], # Link to existing factura
-                "base_descuento": f"{base_desc:,.2f}",
-                "interes_cobrado": f"{interes_cob:,.2f}",
-                "igv": f"{igv_val:,.2f}",
-                "abono": f"{abono_val:,.2f}",
-            })
-        # Ensure facturas_descuento always has at least two entries for table2_data
-        while len(data["facturas_descuento"]) < 2:
-            data["facturas_descuento"].append({})
-        data["total_base_descuento"] = f"{total_base_descuento:,.2f}"
-        data["total_interes_cobrado"] = f"{total_interes_cobrado:,.2f}"
-        data["total_igv_descuento"] = f"{total_igv_descuento:,.2f}"
-        data["total_abono"] = f"{total_abono:,.2f}"
-
-        data["margen_seguridad"] = f"{round(random.uniform(1000.00, 2000.00), 2):,.2f}"
-        data["comision_mas_igv"] = f"{round(random.uniform(500.00, 1000.00), 2):,.2f}"
-        data["total_a_depositar"] = f"{round(total_abono - float(data['comision_mas_igv'].replace(',', '')), 2):,.2f}" # Example calculation
-
-        data["intereses_pactados_interes"] = data["total_interes_cobrado"]
-        data["intereses_pactados_igv"] = data["total_igv_descuento"]
-        data["intereses_pactados_total"] = f"{round(float(data['intereses_pactados_interes'].replace(',', '')) + float(data['intereses_pactados_igv'].replace(',', '')), 2):,.2f}"
-
-        data["comision_estructuracion_comision"] = data["comision_mas_igv"] # Example
-        data["comision_estructuracion_igv"] = f"{round(float(data['comision_estructuracion_comision'].replace(',', '')) * 0.18, 2):,.2f}"
-        data["comision_estructuracion_total"] = f"{round(float(data['comision_estructuracion_comision'].replace(',', '')) * 1.18, 2):,.2f}"
-
-        int_adic = round(random.uniform(0.00, 100.00), 2)
-        igv_adic = round(int_adic * 0.18, 2)
-        data["intereses_adicionales_int"] = f"{int_adic:,.2f}" if int_adic > 0 else ""
-        data["intereses_adicionales_igv"] = f"{igv_adic:,.2f}" if igv_adic > 0 else ""
-        data["intereses_adicionales_total"] = f"{round(int_adic + igv_adic, 2):,.2f}" if int_adic > 0 else ""
-
-        # Conditionally add affiliation commission
-        if random.choice([True, False]):
-            data["imprimir_comision_afiliacion"] = True
-            com_afil = round(random.uniform(100.00, 500.00), 2)
-            igv_afil = round(com_afil * 0.18, 2)
-            data["comision_afiliacion_comision"] = f"{com_afil:,.2f}"
-            data["comision_afiliacion_igv"] = f"{igv_afil:,.2f}"
-            data["comision_afiliacion_total"] = f"{round(com_afil + igv_afil, 2):,.2f}"
-
-        # Generate random signatures
-        possible_signers = [
-            {"name": "Harry Odar Mazza", "dni": "42411175", "role": "MILENIO CONSULTORES SAC"},
-            {"name": "Juan Ricardo Gallo Pizarro", "dni": "02816271", "role": "INANDES CAPITAL FACTOR SAC"},
-            {"name": "Guillermo Francisco Odar Cabrejos", "dni": "07723067", "role": "GARANTE / FIADOR SOLIDARIO"},
-            {"name": "Maria Lopez Perez", "dni": "12345678", "role": "CONTADOR"},
-            {"name": "Carlos Sanchez Ruiz", "dni": "87654321", "role": "ASESOR LEGAL"},
-        ]
-        num_signatures = random.randint(3, len(possible_signers))
-        data["signatures"] = random.sample(possible_signers, num_signatures)
-
         return data
 
     output_dir = "C:/Users/rguti/Inandes.TECH/generated_pdfs"
     os.makedirs(output_dir, exist_ok=True)
 
-    num_pdfs_to_generate = 5 # Generate 5 different PDFs
-
-    for i in range(num_pdfs_to_generate):
-        dummy_pdf_data = generate_random_dummy_data(i)
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        output_file = os.path.join(output_dir, f"generated_invoice_{timestamp}.pdf")
-        
-        print(f"Generating PDF {i+1}/{num_pdfs_to_generate}: {output_file}")
-        generate_pdf(output_file, dummy_pdf_data)
-        print(f"Generated PDF: {output_file}")
-
-    print(f"Finished generating {num_pdfs_to_generate} PDFs in {output_dir}")
-    print("Please check the generated_pdfs folder for the output files.")
-    print("Note: Foxit Reader path might need to be updated in pdf_generator.py if PDFs are not opening automatically.")
+    # Generate one PDF with the variable map
+    map_data = generate_variable_map_data()
+    output_file = os.path.join(output_dir, f"variable_map.pdf")
+    print(f"Generating PDF map: {output_file}")
+    generate_pdf(output_file, map_data)
+    print(f"Generated PDF map: {output_file}")
