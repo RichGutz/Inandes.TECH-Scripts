@@ -14,6 +14,7 @@ def calcular_desembolso_inicial(
     comision_min_usd: float,
     igv_pct: float,
     comision_afiliacion_valor: float = 0.0,
+    comision_afiliacion_usd_valor: float = 0.0, # NUEVO PARAMETRO
     aplicar_comision_afiliacion: bool = False
 ) -> dict:
     """
@@ -48,8 +49,13 @@ def calcular_desembolso_inicial(
     comision_afiliacion = 0.0
     igv_afiliacion = 0.0
     if aplicar_comision_afiliacion:
-        comision_afiliacion = comision_afiliacion_valor
-        igv_afiliacion = comision_afiliacion_valor * igv_pct
+        if moneda_factura == "PEN":
+            comision_afiliacion = comision_afiliacion_valor
+        elif moneda_factura == "USD":
+            comision_afiliacion = comision_afiliacion_usd_valor
+        else:
+            comision_afiliacion = 0.0 # Valor por defecto si la moneda no es PEN ni USD
+        igv_afiliacion = comision_afiliacion * igv_pct
         abono_real_teorico -= (comision_afiliacion + igv_afiliacion)
 
     # --- Paso 5: Desembolso final ---
@@ -83,6 +89,7 @@ def encontrar_tasa_de_avance(
     igv_pct: float,
     monto_objetivo: float,
     comision_afiliacion_valor: float = 0.0,
+    comision_afiliacion_usd_valor: float = 0.0, # NUEVO PARAMETRO
     aplicar_comision_afiliacion: bool = False,
     tasa_avance_min: float = 0.90,
     tasa_avance_max: float = 1.00,
@@ -136,8 +143,13 @@ def encontrar_tasa_de_avance(
     comision_afiliacion = 0.0
     igv_afiliacion = 0.0
     if aplicar_comision_afiliacion:
-        comision_afiliacion = comision_afiliacion_valor
-        igv_afiliacion = comision_afiliacion_valor * igv_pct
+        if moneda_factura == "PEN":
+            comision_afiliacion = comision_afiliacion_valor
+        elif moneda_factura == "USD":
+            comision_afiliacion = comision_afiliacion_usd_valor
+        else:
+            comision_afiliacion = 0.0 # Valor por defecto si la moneda no es PEN ni USD
+        igv_afiliacion = comision_afiliacion * igv_pct
         abono_real -= (comision_afiliacion + igv_afiliacion)
 
     margen_seguridad = valor_neto_real - capital
@@ -177,6 +189,7 @@ if __name__ == '__main__':
     }
 
     print("--- FASE 1: Cálculo Inicial (PRE REDONDEO) ---")
+    datos_ejemplo["comision_afiliacion_usd_valor"] = 50.0 # Añadir para el ejemplo
     resultado_directo = calcular_desembolso_inicial(**datos_ejemplo)
     print(resultado_directo)
 
@@ -184,7 +197,7 @@ if __name__ == '__main__':
     datos_busqueda = datos_ejemplo.copy()
     datos_busqueda["monto_objetivo"] = 5360.00 # ESTE TARGET LO FIJAN
     del datos_busqueda["tasa_avance"]
-
+    datos_busqueda["comision_afiliacion_usd_valor"] = 50.0 # Añadir para el ejemplo
     resultado_busqueda = encontrar_tasa_de_avance(**datos_busqueda)
     print(resultado_busqueda)
 

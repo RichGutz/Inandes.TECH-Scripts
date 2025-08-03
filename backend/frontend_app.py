@@ -168,6 +168,7 @@ if 'pdf_data_loaded_once' not in st.session_state: st.session_state.pdf_data_loa
 if 'initial_calc_result' not in st.session_state: st.session_state.initial_calc_result = None
 if 'recalculate_result' not in st.session_state: st.session_state.recalculate_result = None
 if 'comision_afiliacion_valor' not in st.session_state: st.session_state.comision_afiliacion_valor = 200.0
+if 'comision_afiliacion_usd_valor' not in st.session_state: st.session_state.comision_afiliacion_usd_valor = 50.0 # Nuevo campo
 if 'aplicar_comision_afiliacion' not in st.session_state: st.session_state.aplicar_comision_afiliacion = False
 
 # --- Cargar CSS ---
@@ -311,6 +312,7 @@ with col4:
     st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=10.0, format="%.2f", key="cmp")
     st.number_input("Comisión Mínima (USD)", min_value=0.0, value=3.0, format="%.2f", key="cmu")
     st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=200.0, format="%.2f", key="comision_afiliacion_valor")
+    st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=50.0, format="%.2f", key="comision_afiliacion_usd_valor") # Nuevo campo
     st.checkbox("Aplicar Comisión de Afiliación", key="aplicar_comision_afiliacion")
 
 st.markdown("---")
@@ -334,6 +336,7 @@ with col_paso1:
                 "comision_min_usd": st.session_state.cmu,
                 "igv_pct": 0.18,
                 "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
+                "comision_afiliacion_usd_valor": st.session_state.comision_afiliacion_usd_valor, # NUEVO PARAMETRO
                 "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
                 "monto_desembolsar_manual": 0
             }
@@ -370,6 +373,7 @@ with col_paso2:
                         "comision_min_usd": st.session_state.cmu if 'cmu' in st.session_state else 3.0,
                         "igv_pct": 0.18,
                         "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
+                        "comision_afiliacion_usd_valor": st.session_state.comision_afiliacion_usd_valor, # NUEVO PARAMETRO
                         "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
                         "monto_objetivo": monto_desembolsar_manual
                     }
