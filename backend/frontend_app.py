@@ -80,6 +80,7 @@ if 'po_calc' not in st.session_state: st.session_state.po_calc = 0
 if 'mft' not in st.session_state: st.session_state.mft = 0.0
 if 'mfn' not in st.session_state: st.session_state.mfn = 0.0
 if 'mf' not in st.session_state: st.session_state.mf = ""
+if 'nro_factura' not in st.session_state: st.session_state.nro_factura = ""
 if 'pdf_data_loaded_once' not in st.session_state: st.session_state.pdf_data_loaded_once = False
 if 'initial_calc_result' not in st.session_state: st.session_state.initial_calc_result = None
 if 'recalculate_result' not in st.session_state: st.session_state.recalculate_result = None
@@ -117,6 +118,7 @@ with st.expander("Cargar datos automáticamente desde PDF (Opcional)", expanded=
                         st.session_state.mft = parsed_data.get('monto_total', 0.0)
                         st.session_state.mfn = parsed_data.get('monto_neto', 0.0)
                         st.session_state.mf = parsed_data.get('moneda', 'PEN')
+                        st.session_state.nro_factura = parsed_data.get('invoice_id', '') # Corregido: el parser devuelve 'invoice_id'
                         st.session_state.pdf_data_loaded_once = True
                         st.session_state.last_uploaded_pdf_id = uploaded_pdf_file.file_id
 
@@ -134,6 +136,50 @@ with st.expander("Cargar datos automáticamente desde PDF (Opcional)", expanded=
                 if os.path.exists(temp_file_path):
                     os.remove(temp_file_path)
 
+def validate_inputs():
+    required_fields = {
+        "en": "Nombre del Emisor",
+        "er": "RUC del Emisor",
+        "an": "Nombre del Aceptante",
+        "ar": "RUC del Aceptante",
+        "nro_factura": "Número de Factura",
+        "mft": "Monto Factura Total (con IGV)",
+        "mfn": "Monto Factura Neto",
+        "mf": "Moneda de Factura",
+        "fe": "Fecha de Emisión",
+        "pcd": "Plazo de Crédito",
+        "fd": "Fecha de Desembolso",
+        "ta": "Tasa de Avance",
+        "im": "Interés Mensual",
+        "cp": "Comisión de Estructuración",
+        "cmp": "Comisión Mínima (PEN)",
+        "cmu": "Comisión Mínima (USD)",
+    }
+
+    is_valid = True
+    for key, display_name in required_fields.items():
+        value = st.session_state.get(key)
+        if value is None or (isinstance(value, (str, list)) and not value) or (isinstance(value, (int, float)) and value <= 0 and key not in ["mft", "mfn"]):
+            st.error(f"El campo '{display_name}' es obligatorio y no puede estar vacío o ser cero.")
+            is_valid = False
+
+    # Validar campos numéricos que deben ser > 0
+    numeric_fields_gt_zero = {"mft": "Monto Factura Total", "mfn": "Monto Factura Neto", "ta": "Tasa de Avance", "im": "Interés Mensual", "cp": "Comisión de Estructuración", "cmp": "Comisión Mínima (PEN)", "cmu": "Comisión Mínima (USD)"}
+    for key, display_name in numeric_fields_gt_zero.items():
+        value = st.session_state.get(key)
+        if isinstance(value, (int, float)) and value <= 0:
+            st.error(f"El campo '{display_name}' debe ser mayor que cero.")
+            is_valid = False
+
+    # Validar comisión de afiliación condicionalmente
+    if st.session_state.get('aplicar_comision_afiliacion'):
+        comision_afiliacion_val = st.session_state.get('comision_afiliacion_valor')
+        if comision_afiliacion_val is None or comision_afiliacion_val <= 0:
+            st.error("Si 'Aplicar Comisión de Afiliación' está marcado, el 'Comisión de Afiliación (PEN)' debe ser mayor que cero.")
+            is_valid = False
+
+    return is_valid
+
 # --- Formulario principal ---
 update_date_calculations() # Calcular fechas antes de dibujar el formulario
 st.write("### Ingresa los datos de la operación:")
@@ -149,6 +195,7 @@ with col1:
 
 with col2:
     st.write("##### Montos y Moneda")
+    st.text_input("NÚMERO DE FACTURA", key="nro_factura", disabled=True)
     st.number_input("MONTO FACTURA TOTAL (CON IGV)", min_value=0.0, key="mft", format="%.2f", value=st.session_state.mft)
     st.number_input("MONTO FACTURA NETO", min_value=0.0, key="mfn", format="%.2f", value=st.session_state.mfn)
     currency_options = ["PEN", "USD"]
@@ -184,28 +231,29 @@ st.write("#### Paso 1: Calcular Desembolso Inicial")
 submitted_initial_calc = st.button("Calcular Desembolso Inicial")
 
 if submitted_initial_calc:
-    api_data = {
-        "plazo_operacion": st.session_state.po_calc,
-        "mfn": st.session_state.mfn,
-        "tasa_avance": st.session_state.ta / 100,
-        "interes_mensual": st.session_state.im / 100,
-        "comision_estructuracion_pct": st.session_state.cp / 100,
-        "moneda_factura": st.session_state.mf,
-        "comision_min_pen": st.session_state.cmp,
-        "comision_min_usd": st.session_state.cmu,
-        "igv_pct": 0.18,
-        "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
-        "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
-        "monto_desembolsar_manual": 0
-    }
-    with st.spinner('Calculando desembolso...'):
-        try:
-            response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
-            response.raise_for_status()
-            st.session_state.initial_calc_result = response.json()
-            st.session_state.recalculate_result = None
-        except requests.exceptions.RequestException as e:
-            st.error(f"Error de conexión con la API: {e}")
+    if validate_inputs():
+        api_data = {
+            "plazo_operacion": st.session_state.po_calc,
+            "mfn": st.session_state.mfn,
+            "tasa_avance": st.session_state.ta / 100,
+            "interes_mensual": st.session_state.im / 100,
+            "comision_estructuracion_pct": st.session_state.cp / 100,
+            "moneda_factura": st.session_state.mf,
+            "comision_min_pen": st.session_state.cmp,
+            "comision_min_usd": st.session_state.cmu,
+            "igv_pct": 0.18,
+            "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
+            "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
+            "monto_desembolsar_manual": 0
+        }
+        with st.spinner('Calculando desembolso...'):
+            try:
+                response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
+                response.raise_for_status()
+                st.session_state.initial_calc_result = response.json()
+                st.session_state.recalculate_result = None
+            except requests.exceptions.RequestException as e:
+                st.error(f"Error de conexión con la API: {e}")
 
 if st.session_state.initial_calc_result:
     st.write("##### Resultado del Cálculo Inicial")
@@ -221,27 +269,28 @@ with st.form("recalculate_form"):
 
     if submitted_recalculate:
         if monto_desembolsar_manual > 0:
-            # Re-captura los valores del estado de sesión por si cambiaron
-            api_data = {
-                "plazo_operacion": st.session_state.po_calc,
-                "mfn": st.session_state.mfn, # Usar valor del state
-                "interes_mensual": st.session_state.im / 100 if 'im' in st.session_state else 0.0125,
-                "comision_estructuracion_pct": st.session_state.cp / 100 if 'cp' in st.session_state else 0.005,
-                "moneda_factura": st.session_state.mf,
-                "comision_min_pen": st.session_state.cmp if 'cmp' in st.session_state else 10.0,
-                "comision_min_usd": st.session_state.cmu if 'cmu' in st.session_state else 3.0,
-                "igv_pct": 0.18,
-                "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
-                "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
-                "monto_objetivo": monto_desembolsar_manual
-            }
-            with st.spinner('Buscando tasa de avance...'):
-                try:
-                    response = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data)
-                    response.raise_for_status()
-                    st.session_state.recalculate_result = response.json()
-                except requests.exceptions.RequestException as e:
-                    st.error(f"Error de conexión con la API: {e}")
+            if validate_inputs(): # Añadir validación aquí también
+                # Re-captura los valores del estado de sesión por si cambiaron
+                api_data = {
+                    "plazo_operacion": st.session_state.po_calc,
+                    "mfn": st.session_state.mfn, # Usar valor del state
+                    "interes_mensual": st.session_state.im / 100 if 'im' in st.session_state else 0.0125,
+                    "comision_estructuracion_pct": st.session_state.cp / 100 if 'cp' in st.session_state else 0.005,
+                    "moneda_factura": st.session_state.mf,
+                    "comision_min_pen": st.session_state.cmp if 'cmp' in st.session_state else 10.0,
+                    "comision_min_usd": st.session_state.cmu if 'cmu' in st.session_state else 3.0,
+                    "igv_pct": 0.18,
+                    "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
+                    "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
+                    "monto_objetivo": monto_desembolsar_manual
+                }
+                with st.spinner('Buscando tasa de avance...'):
+                    try:
+                        response = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data)
+                        response.raise_for_status()
+                        st.session_state.recalculate_result = response.json()
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Error de conexión con la API: {e}")
         else:
             st.error("Debe ingresar un Monto a Desembolsar Objetivo mayor a 0.")
 
