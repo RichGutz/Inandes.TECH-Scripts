@@ -3,6 +3,88 @@ import requests
 import os
 import pdf_parser
 import datetime
+import pdf_generator # Importar el módulo pdf_generator
+
+API_BASE_URL = "http://127.0.0.1:8000" # <<< ¡IMPORTANTE! Reemplaza esto con tu URL de ngrok
+
+# Función para preparar los datos para el PDF
+def prepare_pdf_data(tipo_documento: str) -> dict:
+    data = {
+        "tipo_documento": tipo_documento,
+        "contract_name": "CONTRATO DE FACTORING", # Valor fijo por ahora
+        "client_name": st.session_state.en,
+        "client_ruc": st.session_state.er,
+        "relation_type": "FACTURA(S)", # Valor fijo por ahora
+        "anexo_number": "N/A", # Se generará en pdf_generator o se pasará si existe
+        "document_date": datetime.datetime.now().strftime("%d-%m-%Y"),
+        "facturas_comision": [],
+        "facturas_descuento": [],
+        "signatures": [], # Se llenará en pdf_generator o se pasará si existe
+    }
+
+    # Datos de la factura (Tabla 1)
+    data["facturas_comision"].append({
+        "nro_factura": st.session_state.nro_factura,
+        "fecha_vencimiento": st.session_state.fp_calc,
+        "fecha_desembolso": st.session_state.fd,
+        "dias": st.session_state.po_calc,
+        "girador": st.session_state.en, # El emisor es el girador
+        "aceptante": st.session_state.an,
+        "monto_neto": st.session_state.mfn,
+        "detraccion_retencion": round(((st.session_state.mft - st.session_state.mfn) / st.session_state.mft) * 100, 2) if st.session_state.mft > 0 else 0.0,
+    })
+
+    # Resultados del cálculo (Tabla 2 y Tablas Inferiores)
+    if st.session_state.recalculate_result:
+        calc_results = st.session_state.recalculate_result["calculo_con_tasa_encontrada"]
+        data["facturas_descuento"].append({
+            "nro_factura": st.session_state.nro_factura,
+            "base_descuento": calc_results["capital"],
+            "interes_cobrado": calc_results["interes"],
+            "igv": calc_results["igv_interes"],
+            "abono": calc_results["abono_real_calculado"], # Este es el abono real final
+        })
+        # Asegurar que facturas_descuento siempre tenga al menos dos entradas para la tabla
+        while len(data["facturas_descuento"]) < 2:
+            data["facturas_descuento"].append({})
+
+        data["total_monto_neto"] = st.session_state.mfn # Asumiendo que es el total de la única factura
+        data["detracciones_total"] = round(st.session_state.mft - st.session_state.mfn, 2)
+        data["total_neto"] = st.session_state.mfn
+
+        data["total_base_descuento"] = calc_results["capital"]
+        data["total_interes_cobrado"] = calc_results["interes"]
+        data["total_igv_descuento"] = calc_results["igv_interes"]
+        data["total_abono"] = calc_results["abono_real_calculado"]
+
+        data["margen_seguridad"] = calc_results["margen_seguridad"]
+        data["comision_mas_igv"] = calc_results["comision_estructuracion"] + calc_results["igv_comision_estructuracion"]
+        data["total_a_depositar"] = calc_results["abono_real_calculado"]
+
+        data["intereses_pactados_interes"] = calc_results["interes"]
+        data["intereses_pactados_igv"] = calc_results["igv_interes"]
+        data["intereses_pactados_total"] = calc_results["interes"] + calc_results["igv_interes"]
+
+        data["comision_estructuracion_comision"] = calc_results["comision_estructuracion"]
+        data["comision_estructuracion_igv"] = calc_results["igv_comision_estructuracion"]
+        data["comision_estructuracion_total"] = calc_results["comision_estructuracion"] + calc_results["igv_comision_estructuracion"]
+
+        data["imprimir_comision_afiliacion"] = st.session_state.aplicar_comision_afiliacion
+        data["comision_afiliacion_comision"] = calc_results["comision_afiliacion"]
+        data["comision_afiliacion_igv"] = calc_results["igv_afiliacion"]
+        data["comision_afiliacion_total"] = calc_results["comision_afiliacion"] + calc_results["igv_afiliacion"]
+
+        # Intereses adicionales (siempre 0 por ahora, o se calcularán en el futuro)
+        data["intereses_adicionales_int"] = 0.0
+        data["intereses_adicionales_igv"] = 0.0
+        data["intereses_adicionales_total"] = 0.0
+
+    return data
+
+# Función para simular el guardado en Supabase
+def save_proforma_to_supabase(pdf_data: dict):
+    tipo_documento = pdf_data.get("tipo_documento", "Documento")
+    st.success(f"{tipo_documento} grabada en Supabase (simulado). Datos: {pdf_data}")
 
 API_BASE_URL = "http://127.0.0.1:8000" # <<< ¡IMPORTANTE! Reemplaza esto con tu URL de ngrok
 
@@ -94,7 +176,11 @@ try:
 except FileNotFoundError:
     pass
 
-st.title("Calculadora de Factoring INANDES")
+title_col, logo_col = st.columns([0.8, 0.2])
+with title_col:
+    st.write("## Modulo 1 - Factoring INANDES")
+with logo_col:
+    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", width=120, use_container_width=True)
 
 # --- Sección de Carga de Archivos ---
 with st.expander("Cargar datos automáticamente desde PDF (Opcional)", expanded=True):
@@ -227,73 +313,114 @@ with col4:
     st.checkbox("Aplicar Comisión de Afiliación", key="aplicar_comision_afiliacion")
 
 st.markdown("---")
-st.write("#### Paso 1: Calcular Desembolso Inicial")
-submitted_initial_calc = st.button("Calcular Desembolso Inicial")
 
-if submitted_initial_calc:
-    if validate_inputs():
-        api_data = {
-            "plazo_operacion": st.session_state.po_calc,
-            "mfn": st.session_state.mfn,
-            "tasa_avance": st.session_state.ta / 100,
-            "interes_mensual": st.session_state.im / 100,
-            "comision_estructuracion_pct": st.session_state.cp / 100,
-            "moneda_factura": st.session_state.mf,
-            "comision_min_pen": st.session_state.cmp,
-            "comision_min_usd": st.session_state.cmu,
-            "igv_pct": 0.18,
-            "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
-            "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
-            "monto_desembolsar_manual": 0
-        }
-        with st.spinner('Calculando desembolso...'):
-            try:
-                response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
-                response.raise_for_status()
-                st.session_state.initial_calc_result = response.json()
-                st.session_state.recalculate_result = None
-            except requests.exceptions.RequestException as e:
-                st.error(f"Error de conexión con la API: {e}")
+col_paso1, col_paso2 = st.columns(2)
 
-if st.session_state.initial_calc_result:
-    st.write("##### Resultado del Cálculo Inicial")
-    st.json(st.session_state.initial_calc_result)
+with col_paso1:
+    st.write("#### Paso 1: Calcular Desembolso Inicial")
+    submitted_initial_calc = st.button("Calcular Desembolso Inicial")
+
+    if submitted_initial_calc:
+        if validate_inputs():
+            api_data = {
+                "plazo_operacion": st.session_state.po_calc,
+                "mfn": st.session_state.mfn,
+                "tasa_avance": st.session_state.ta / 100,
+                "interes_mensual": st.session_state.im / 100,
+                "comision_estructuracion_pct": st.session_state.cp / 100,
+                "moneda_factura": st.session_state.mf,
+                "comision_min_pen": st.session_state.cmp,
+                "comision_min_usd": st.session_state.cmu,
+                "igv_pct": 0.18,
+                "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
+                "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
+                "monto_desembolsar_manual": 0
+            }
+            with st.spinner('Calculando desembolso...'):
+                try:
+                    response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
+                    response.raise_for_status()
+                    st.session_state.initial_calc_result = response.json()
+                    st.session_state.recalculate_result = None
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Error de conexión con la API: {e}")
+
+    if st.session_state.initial_calc_result:
+        st.write("##### Resultado del Cálculo Inicial")
+        st.json(st.session_state.initial_calc_result)
+
+with col_paso2:
+    st.write("#### Paso 2: Encontrar Tasa de Avance para un Monto Objetivo")
+    with st.form("recalculate_form"):
+        monto_desembolsar_manual = st.number_input("Monto a Desembolsar Objetivo", min_value=0.0, value=0.0, format="%.2f", key="mdm_recalc")
+        submitted_recalculate = st.form_submit_button("Encontrar Tasa de Avance", disabled=not st.session_state.initial_calc_result)
+
+        if submitted_recalculate:
+            if monto_desembolsar_manual > 0:
+                if validate_inputs(): # Añadir validación aquí también
+                    # Re-captura los valores del estado de sesión por si cambiaron
+                    api_data = {
+                        "plazo_operacion": st.session_state.po_calc,
+                        "mfn": st.session_state.mfn, # Usar valor del state
+                        "interes_mensual": st.session_state.im / 100 if 'im' in st.session_state else 0.0125,
+                        "comision_estructuracion_pct": st.session_state.cp / 100 if 'cp' in st.session_state else 0.005,
+                        "moneda_factura": st.session_state.mf,
+                        "comision_min_pen": st.session_state.cmp if 'cmp' in st.session_state else 10.0,
+                        "comision_min_usd": st.session_state.cmu if 'cmu' in st.session_state else 3.0,
+                        "igv_pct": 0.18,
+                        "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
+                        "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
+                        "monto_objetivo": monto_desembolsar_manual
+                    }
+                    with st.spinner('Buscando tasa de avance...'):
+                        try:
+                            response = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data)
+                            response.raise_for_status()
+                            st.session_state.recalculate_result = response.json()
+                        except requests.exceptions.RequestException as e:
+                            st.error(f"Error de conexión con la API: {e}")
+            else:
+                st.error("Debe ingresar un Monto a Desembolsar Objetivo mayor a 0.")
+
+    if st.session_state.recalculate_result:
+        st.write("##### Resultado de la Búsqueda")
+        st.json(st.session_state.recalculate_result)
+
+# Nueva sección para Grabar e Imprimir Documento
+st.markdown("---")
+
+# Paso 3: Grabar Documento
+gr_title_col, gr_cot_btn_col, gr_prop_btn_col = st.columns([0.4, 0.3, 0.3])
+with gr_title_col:
+    st.write("#### Paso 3: Grabar Documento")
+with gr_cot_btn_col:
+    if st.button("GRABAR Cotización", disabled=not st.session_state.recalculate_result, key="grabar_cotizacion_btn"):
+        with st.spinner("Grabando Cotización..."):
+            pdf_data = prepare_pdf_data("Cotizacion")
+            save_proforma_to_supabase(pdf_data)
+with gr_prop_btn_col:
+    if st.button("GRABAR Propuesta", disabled=not st.session_state.recalculate_result, key="grabar_propuesta_btn"):
+        with st.spinner("Grabando Propuesta..."):
+            pdf_data = prepare_pdf_data("Propuesta")
+            save_proforma_to_supabase(pdf_data)
 
 st.markdown("---")
 
-# --- Segundo Formulario para Recalcular ---
-st.write("#### Paso 2: Encontrar Tasa de Avance para un Monto Objetivo")
-with st.form("recalculate_form"):
-    monto_desembolsar_manual = st.number_input("Monto a Desembolsar Objetivo", min_value=0.0, value=0.0, format="%.2f", key="mdm_recalc")
-    submitted_recalculate = st.form_submit_button("Encontrar Tasa de Avance")
-
-    if submitted_recalculate:
-        if monto_desembolsar_manual > 0:
-            if validate_inputs(): # Añadir validación aquí también
-                # Re-captura los valores del estado de sesión por si cambiaron
-                api_data = {
-                    "plazo_operacion": st.session_state.po_calc,
-                    "mfn": st.session_state.mfn, # Usar valor del state
-                    "interes_mensual": st.session_state.im / 100 if 'im' in st.session_state else 0.0125,
-                    "comision_estructuracion_pct": st.session_state.cp / 100 if 'cp' in st.session_state else 0.005,
-                    "moneda_factura": st.session_state.mf,
-                    "comision_min_pen": st.session_state.cmp if 'cmp' in st.session_state else 10.0,
-                    "comision_min_usd": st.session_state.cmu if 'cmu' in st.session_state else 3.0,
-                    "igv_pct": 0.18,
-                    "comision_afiliacion_valor": st.session_state.comision_afiliacion_valor,
-                    "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
-                    "monto_objetivo": monto_desembolsar_manual
-                }
-                with st.spinner('Buscando tasa de avance...'):
-                    try:
-                        response = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data)
-                        response.raise_for_status()
-                        st.session_state.recalculate_result = response.json()
-                    except requests.exceptions.RequestException as e:
-                        st.error(f"Error de conexión con la API: {e}")
-        else:
-            st.error("Debe ingresar un Monto a Desembolsar Objetivo mayor a 0.")
-
-if st.session_state.recalculate_result:
-    st.write("##### Resultado de la Búsqueda")
-    st.json(st.session_state.recalculate_result)
+# Paso 4: Imprimir Documento
+imp_title_col, imp_cot_btn_col, imp_prop_btn_col = st.columns([0.4, 0.3, 0.3])
+with imp_title_col:
+    st.write("#### Paso 4: Imprimir Documento")
+with imp_cot_btn_col:
+    if st.button("IMPRIMIR Cotización", disabled=not st.session_state.recalculate_result, key="imprimir_cotizacion_btn"):
+        with st.spinner("Generando Cotización para impresión..."):
+            pdf_data = prepare_pdf_data("Cotizacion")
+            output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", f"Cotizacion_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf")
+            pdf_generator.generate_pdf(output_filepath, pdf_data)
+            st.success(f"Cotización generada para impresión en: {output_filepath}")
+with imp_prop_btn_col:
+    if st.button("IMPRIMIR Propuesta", disabled=not st.session_state.recalculate_result, key="imprimir_propuesta_btn"):
+        with st.spinner("Generando Propuesta para impresión..."):
+            pdf_data = prepare_pdf_data("Propuesta")
+            output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", f"Propuesta_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf")
+            pdf_generator.generate_pdf(output_filepath, pdf_data)
+            st.success(f"Propuesta generada para impresión en: {output_filepath}")
