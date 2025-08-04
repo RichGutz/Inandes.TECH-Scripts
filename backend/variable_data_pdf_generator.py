@@ -69,4 +69,7 @@ def generate_variable_pdf(data_dict: dict, output_filepath: str):
     ]))
 
     story.append(table)
-    doc.build(story)
+    try:
+        doc.build(story)
+    except Exception as e:
+        print(f"Error building PDF: {e}")

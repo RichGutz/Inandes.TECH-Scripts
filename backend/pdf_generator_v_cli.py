@@ -130,7 +130,7 @@ def generate_pdf(output_filepath, data):
             Paragraph(item.get('invoice_issuer_name', ''), styles['ExtraSmallFont']),
             Paragraph(item.get('invoice_payer_name', ''), styles['ExtraSmallFont']),
             Paragraph(f"PEN {item.get('invoice_total_amount', 0.0):,.2f}", styles['ExtraSmallFont']),
-            Paragraph(f"{item.get('detraccion_retencion', 0)}%", styles['ExtraSmallFont']),
+            Paragraph(f"{item.get('detraccion_porcentaje', 0):.2f}%", styles['ExtraSmallFont']),
         ])
     table1_data.append([
         Paragraph("", styles['ExtraSmallFont']),
@@ -139,7 +139,7 @@ def generate_pdf(output_filepath, data):
         Paragraph("", styles['ExtraSmallFont']),
         Paragraph("", styles['ExtraSmallFont']),
         Paragraph("<b>Total</b>", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_monto_neto', '72,768.41')}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_monto_neto', 0.0):,.2f}", styles['BoldSmallFont']),
         Paragraph("", styles['ExtraSmallFont']),
     ])
     table1_data.append([
@@ -149,7 +149,7 @@ def generate_pdf(output_filepath, data):
         Paragraph("", styles['ExtraSmallFont']),
         Paragraph("", styles['ExtraSmallFont']),
         Paragraph("<b>(-) Detracciones</b>", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('detracciones_total', '2,911.00')}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('detracciones_total', 0.0):,.2f}", styles['BoldSmallFont']),
         Paragraph("", styles['ExtraSmallFont']),
     ])
     table1_data.append([
@@ -159,7 +159,7 @@ def generate_pdf(output_filepath, data):
         Paragraph("", styles['ExtraSmallFont']),
         Paragraph("", styles['ExtraSmallFont']),
         Paragraph("<b>Total Neto</b>", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_neto', '69,857.41')}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_neto', 0.0):,.2f}", styles['BoldSmallFont']),
         Paragraph("", styles['ExtraSmallFont']),
     ])
 
@@ -218,13 +218,13 @@ def generate_pdf(output_filepath, data):
     # Add summary rows
     total_row = [
         Paragraph("", styles['SmallFont']),
-        Paragraph(f"PEN {data.get('total_capital_calculado', '')}", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_interes_calculado', '')}", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_igv_interes_calculado', '')}", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_abono_real_calculado', '')}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_capital_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_interes_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_igv_interes_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_abono_real_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
         Paragraph("", styles['SmallFont']),
         Paragraph("Margen de Seguridad", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_margen_seguridad_calculado', '')}", styles['BoldSmallFontRight']),
+        Paragraph(f"PEN {data.get('total_margen_seguridad_calculado', 0.0):,.2f}", styles['BoldSmallFontRight']),
     ]
     table2_data.append(total_row)
 
@@ -233,7 +233,7 @@ def generate_pdf(output_filepath, data):
         Paragraph("", styles['SmallFont']),
         Paragraph("", styles['SmallFont']),
         Paragraph("<b>Comisión + IGV</b>", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', '0.00')}", styles['BoldSmallFontRight']),
+        Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight']),
         Paragraph("", styles['SmallFont']),
         Paragraph("", styles['SmallFont']),
         Paragraph("", styles['SmallFont']),
@@ -245,7 +245,7 @@ def generate_pdf(output_filepath, data):
         Paragraph("", styles['SmallFont']),
         Paragraph("", styles['SmallFont']),
         Paragraph("<b>Total a Depositar:</b>", styles['BoldSmallFont']),
-        Paragraph(f"PEN {data.get('total_a_depositar', '0.00')}", styles['BoldSmallFontRight']),
+        Paragraph(f"PEN {data.get('total_a_depositar', 0.0):,.2f}", styles['BoldSmallFontRight']),
         Paragraph("", styles['SmallFont']),
         Paragraph("Se devuelve al final de la operación, sirve para cubrir intereses adicionales por atrasos del PAGADOR / ADQUIRIENTE", styles['SmallTinyFont']),
         Paragraph("", styles['SmallFont']),
@@ -344,9 +344,9 @@ def generate_pdf(output_filepath, data):
         # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN
         comision_estructuracion_data = [
             [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraSmallFontCenter'])],
-            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', '684.51')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', '123.21')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', '807.72')}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
         ]
         comision_estructuracion_table = Table(comision_estructuracion_data, colWidths=[0.80625*inch, 0.80625*inch])
         comision_estructuracion_table.setStyle(TableStyle([
@@ -364,9 +364,9 @@ def generate_pdf(output_filepath, data):
         # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE AFILIACION
         comision_afiliacion_data = [
             [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE AFILIACION</b>", styles['BoldExtraSmallFontCenter'])],
-            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion_monto_calculado', '')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_afiliacion_calculado', '')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion', '')}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_afiliacion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
         ]
         comision_afiliacion_table = Table(comision_afiliacion_data, colWidths=[0.80625*inch, 0.80625*inch])
         comision_afiliacion_table.setStyle(TableStyle([
@@ -384,9 +384,9 @@ def generate_pdf(output_filepath, data):
         # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES
         intereses_adicionales_data = [
             [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES</b>", styles['BoldExtraSmallFontCenter'])],
-            [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', '')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', '')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', '')}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', 0.0):,.2f}", styles['BoldSmallFontRight'])],
         ]
         intereses_adicionales_table = Table(intereses_adicionales_data, colWidths=[0.9675*inch, 0.645*inch])
         intereses_adicionales_table.setStyle(TableStyle([
@@ -440,9 +440,9 @@ def generate_pdf(output_filepath, data):
         # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN
         comision_estructuracion_data = [
             [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraSmallFontCenter'])],
-            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', '684.51')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', '123.21')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', '807.72')}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
         ]
         comision_estructuracion_table = Table(comision_estructuracion_data, colWidths=[1*inch, 1*inch])
         comision_estructuracion_table.setStyle(TableStyle([
@@ -460,9 +460,9 @@ def generate_pdf(output_filepath, data):
         # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES
         intereses_adicionales_data = [
             [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES</b>", styles['BoldExtraSmallFontCenter'])],
-            [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', '')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', '')}", styles['BoldSmallFontRight'])],
-            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', '')}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', 0.0):,.2f}", styles['BoldSmallFontRight'])],
         ]
         intereses_adicionales_table = Table(intereses_adicionales_data, colWidths=[1.2*inch, 0.8*inch])
         intereses_adicionales_table.setStyle(TableStyle([
@@ -589,20 +589,20 @@ if __name__ == "__main__":
         'tipo_documento': 'LIQUIDACIÓN DE OPERACIÓN',
         'contract_name': 'INANDES FACTOR CAPITAL SAC',
         'relation_type': 'FACTURA(S)',
-        'anexo_number': 'XX', # Placeholder
+        'anexo_number': '31', # Placeholder
         'document_date': datetime.datetime.now().strftime("%A %d, %B, %Y").upper(),
         
         # Placeholders for calculated totals - these will be calculated later
         'total_monto_neto': sum(inv.get('invoice_total_amount', 0) for inv in invoices),
-        'detracciones_total': 0, # Placeholder
-        'total_neto': sum(inv.get('invoice_total_amount', 0) for inv in invoices), # Placeholder
+        'detracciones_total': sum(inv.get('invoice_total_amount', 0) * (inv.get('detraccion_porcentaje', 0) / 100) for inv in invoices),
+        'total_neto': sum(inv.get('invoice_total_amount', 0) * (1 - (inv.get('detraccion_porcentaje', 0) / 100)) for inv in invoices),
         'total_capital_calculado': sum(inv.get('advance_amount', 0) for inv in invoices),
-        'total_interes_calculado': 0, # Placeholder
-        'total_igv_interes_calculado': 0, # Placeholder
+        'total_interes_calculado': sum(inv.get('interes_calculado', 0) for inv in invoices),
+        'total_igv_interes_calculado': sum(inv.get('igv_interes_calculado', 0) for inv in invoices),
         'total_abono_real_calculado': sum(inv.get('initial_disbursement', 0) for inv in invoices),
-        'total_margen_seguridad_calculado': 0, # Placeholder
+        'total_margen_seguridad_calculado': sum(inv.get('margen_seguridad_calculado', 0) for inv in invoices),
         'total_comision_estructuracion_monto_calculado': sum(inv.get('commission_amount', 0) for inv in invoices),
-        'total_a_depositar': sum(inv.get('initial_disbursement', 0) for inv in invoices), # Placeholder
+        'total_a_depositar': sum(inv.get('initial_disbursement', 0) for inv in invoices) - sum(inv.get('commission_amount', 0) for inv in invoices),
         'imprimir_comision_afiliacion': args.aplicar_comision_afiliacion,
         'total_comision_afiliacion_monto_calculado': args.comision_afiliacion_monto_calculado,
         'total_igv_afiliacion_calculado': args.igv_afiliacion_calculado,

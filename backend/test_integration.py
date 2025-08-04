@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from supabase_handler import get_proposal_details_by_id
 
 def run_test():
-    proposal_id = "TRANSPORTES_SANTA_FE_DEL_NORTE_SAC-E001-676-03-08-25"
+    proposal_id = "TRANSPORTES_SANTA_FE_DEL_NORTE_SAC-E001-676-04-08-25"
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_filepath = f"C:/Users/rguti/Inandes.TECH/generated_pdfs/{proposal_id}_{timestamp}.pdf"
 

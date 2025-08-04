@@ -47,6 +47,7 @@ FLATTENED_TO_SUPABASE_MAPPING = {
     'comision_afiliacion_pen': 'comision_afiliacion_pen',
     'comision_afiliacion_usd': 'comision_afiliacion_usd',
     'aplicar_comision_afiliacion': 'aplicar_comision_afiliacion',
+    'detraccion_porcentaje': 'detraccion_porcentaje',
 
     # Campos calculados (de initial_calc_result o recalculate_result)
     'fecha_pago_calculada': 'fecha_pago_calculada',
@@ -152,7 +153,7 @@ def save_proposal(session_data: dict) -> tuple[bool, str]:
         # 3. Generar proposal_id y estado (campos especiales)
         emisor_nombre_id = data_to_insert.get('emisor_nombre', 'SIN_NOMBRE').replace(' ', '_').replace('.', '').replace(',', '')
         numero_factura = data_to_insert.get('numero_factura', 'SIN_FACTURA')
-        fecha_propuesta = datetime.datetime.now().strftime('%d-%m-%y')
+        fecha_propuesta = datetime.datetime.now().strftime('%d-%m-%y-%H-%M-%S')
         data_to_insert['proposal_id'] = f"{emisor_nombre_id}-{numero_factura}-{fecha_propuesta}"
         data_to_insert['estado'] = 'ACTIVO'
 
@@ -190,35 +191,40 @@ def get_proposal_details_by_id(proposal_id: str) -> dict:
         return {}
 
     try:
-        response = supabase.table('propuestas').select('*').eq('proposal_id', proposal_id).single().execute()
+        response = supabase.table('propuestas').select('*').eq('proposal_id', proposal_id).execute()
 
-        if response.data:
+        if response.data and len(response.data) > 0:
+            # Tomar el primer (y único esperado) resultado
+            proposal_data = response.data[0]
             # Mapeo inverso para que coincida con los argumentos del CLI
             details = {
-                'invoice_issuer_name': response.data.get('emisor_nombre'),
-                'invoice_issuer_ruc': response.data.get('emisor_ruc'),
-                'invoice_issuer_address': response.data.get('emisor_direccion', 'N/A'),
-                'invoice_payer_name': response.data.get('aceptante_nombre'),
-                'invoice_payer_ruc': response.data.get('aceptante_ruc'),
-                'invoice_payer_address': response.data.get('aceptante_direccion', 'N/A'),
-                'invoice_series_and_number': response.data.get('numero_factura'),
-                'invoice_currency': response.data.get('moneda_factura'),
-                'invoice_total_amount': response.data.get('monto_total_factura'),
-                'invoice_issue_date': response.data.get('fecha_emision_factura'),
-                'invoice_due_date': response.data.get('fecha_pago_calculada'),
-                'advance_rate': response.data.get('tasa_de_avance'),
-                'advance_amount': response.data.get('capital_calculado'),
-                'commission_rate': response.data.get('comision_de_estructuracion'),
-                'commission_amount': response.data.get('comision_estructuracion_monto_calculado'),
-                'interes_calculado': response.data.get('interes_calculado'),
-                'igv_interes_calculado': response.data.get('igv_interes_calculado'),
-                'initial_disbursement': response.data.get('abono_real_calculado'),
-                'financing_term_days': response.data.get('plazo_operacion_calculado'),
-                'tcea': response.data.get('tcea_calculada', 0.0),
-                'investor_name': response.data.get('nombre_inversionista', 'INANDES CAPITAL S.A.C.'),
-                'aplicar_comision_afiliacion': response.data.get('aplicar_comision_afiliacion', False),
-                'comision_afiliacion_monto_calculado': response.data.get('comision_afiliacion_monto_calculado'),
-                'igv_afiliacion_calculado': response.data.get('igv_afiliacion_calculado'),
+                'proposal_id': proposal_data.get('proposal_id'), # Add proposal_id here
+                'invoice_issuer_name': proposal_data.get('emisor_nombre'),
+                'invoice_issuer_ruc': proposal_data.get('emisor_ruc'),
+                'invoice_issuer_address': proposal_data.get('emisor_direccion', 'N/A'),
+                'invoice_payer_name': proposal_data.get('aceptante_nombre'),
+                'invoice_payer_ruc': proposal_data.get('aceptante_ruc'),
+                'invoice_payer_address': proposal_data.get('aceptante_direccion', 'N/A'),
+                'invoice_series_and_number': proposal_data.get('numero_factura'),
+                'invoice_currency': proposal_data.get('moneda_factura'),
+                'invoice_total_amount': proposal_data.get('monto_total_factura'),
+                'invoice_issue_date': proposal_data.get('fecha_emision_factura'),
+                'invoice_due_date': proposal_data.get('fecha_pago_calculada'),
+                'advance_rate': proposal_data.get('tasa_de_avance'),
+                'advance_amount': proposal_data.get('capital_calculado'),
+                'commission_rate': proposal_data.get('comision_de_estructuracion'),
+                'commission_amount': proposal_data.get('comision_estructuracion_monto_calculado'),
+                'interes_calculado': proposal_data.get('interes_calculado'),
+                'igv_interes_calculado': proposal_data.get('igv_interes_calculado'),
+                'initial_disbursement': proposal_data.get('abono_real_calculado'),
+                'financing_term_days': proposal_data.get('plazo_operacion_calculado'),
+                'tcea': proposal_data.get('tcea_calculada', 0.0),
+                'margen_seguridad_calculado': proposal_data.get('margen_seguridad_calculado', 0.0),
+                'investor_name': proposal_data.get('nombre_inversionista', 'INANDES CAPITAL S.A.C.'),
+                'aplicar_comision_afiliacion': proposal_data.get('aplicar_comision_afiliacion', False),
+                'comision_afiliacion_monto_calculado': proposal_data.get('comision_afiliacion_monto_calculado'),
+                'igv_afiliacion_calculado': proposal_data.get('igv_afiliacion_calculado'),
+                'detraccion_porcentaje': round(proposal_data.get('detraccion_porcentaje', 0.0), 2),
             }
 
             # Formatear fechas de YYYY-MM-DD a DD-MM-YYYY
@@ -238,3 +244,27 @@ def get_proposal_details_by_id(proposal_id: str) -> dict:
     except Exception as e:
         print(f"[ERROR en get_proposal_details_by_id]: {e}")
         return {}
+
+def get_active_proposals_by_emisor_nombre(emisor_nombre: str) -> list[dict]:
+    """
+    Recupera una lista de propuestas activas desde Supabase para un emisor_nombre dado.
+    """
+    if not supabase:
+        print("Error: La conexión con Supabase no está disponible.")
+        return []
+
+    try:
+        response = supabase.table('propuestas')\
+            .select('proposal_id, aceptante_nombre, abono_real_calculado')\
+            .eq('emisor_nombre', emisor_nombre)\
+            .eq('estado', 'ACTIVO')\
+            .execute()
+
+        if response.data:
+            return response.data
+        else:
+            return []
+
+    except Exception as e:
+        print(f"[ERROR en get_active_proposals_by_emisor_nombre]: {e}")
+        return []

@@ -81,6 +81,8 @@ if 'recalculate_result' not in st.session_state: st.session_state.recalculate_re
 if 'comision_afiliacion_pen' not in st.session_state: st.session_state.comision_afiliacion_pen = 200.0
 if 'comision_afiliacion_usd' not in st.session_state: st.session_state.comision_afiliacion_usd = 50.0
 if 'aplicar_comision_afiliacion' not in st.session_state: st.session_state.aplicar_comision_afiliacion = False
+if 'detraccion_porcentaje' not in st.session_state: st.session_state.detraccion_porcentaje = 0.0
+if 'last_saved_proposal_id' not in st.session_state: st.session_state.last_saved_proposal_id = ''
 
 # --- UI: Título y CSS ---
 try:
@@ -152,6 +154,7 @@ with col2:
     detraccion_retencion_pct = 0.0
     if st.session_state.monto_total_factura > 0:
         detraccion_retencion_pct = ((st.session_state.monto_total_factura - st.session_state.monto_neto_factura) / st.session_state.monto_total_factura) * 100
+    st.session_state.detraccion_porcentaje = detraccion_retencion_pct
     st.text_input("Detracción / Retención (%)", value=f"{detraccion_retencion_pct:.2f}%", disabled=True)
 with col3:
     st.write("##### Fechas y Plazos")
@@ -245,20 +248,140 @@ with col_paso2:
 
 # --- Pasos 3 y 4: Grabar e Imprimir ---
 st.markdown("---")
-st.write("### Acciones Finales")
-col_paso3, col_paso4 = st.columns(2)
+st.write("#### Paso 3: Grabar Propuesta")
+if st.button("GRABAR Propuesta en Base de Datos", disabled=not st.session_state.recalculate_result):
+    with st.spinner("Guardando propuesta..."):
+        success, message = supabase_handler.save_proposal(st.session_state)
+        if success:
+            st.success(message)
+            # Extract proposal_id from the success message and store it
+            if "Propuesta con ID" in message:
+                start_index = message.find("ID ") + 3
+                end_index = message.find(" guardada")
+                st.session_state.last_saved_proposal_id = message[start_index:end_index]
+        else:
+            st.error(message)
 
-with col_paso3:
-    st.write("#### Paso 3: Grabar Propuesta")
-    if st.button("GRABAR Propuesta en Base de Datos", disabled=not st.session_state.recalculate_result):
-        with st.spinner("Guardando propuesta..."):
-            success, message = supabase_handler.save_proposal(st.session_state)
-            if success:
-                st.success(message)
+st.markdown("---") # Divider between Paso 3 and Paso 4
+
+st.write("#### Paso 4: Imprimir Documento")
+# Botón de impresión retirado según solicitud del usuario
+
+# --- UI: Consulta y Selección de Propuestas ---
+st.markdown("---")
+st.write("### Consulta y Selección de Propuestas")
+
+with st.expander("Buscar Propuestas para Consolidar", expanded=True):
+    col_id_propuesta, col_razon_social = st.columns(2)
+    with col_id_propuesta:
+        st.text_input("ID Propuesta (Opcional)", key="search_proposal_id", value=st.session_state.last_saved_proposal_id)
+    with col_razon_social:
+        st.text_input("Razón Social del Emisor", key="search_emisor_nombre")
+
+    search_button = st.button("Seleccionar Propuestas")
+
+    if search_button:
+        if st.session_state.search_proposal_id:
+            # Search by proposal ID
+            proposal = supabase_handler.get_proposal_details_by_id(st.session_state.search_proposal_id)
+            if proposal and 'proposal_id' in proposal:
+                if 'accumulated_proposals' not in st.session_state:
+                    st.session_state.accumulated_proposals = []
+                # Add only if not already in the list
+                if not any('proposal_id' in p and p['proposal_id'] == proposal['proposal_id'] for p in st.session_state.accumulated_proposals):
+                    st.session_state.accumulated_proposals.append(proposal)
+                
             else:
-                st.error(message)
+                st.info(f"No se encontró ninguna propuesta con el ID: {st.session_state.search_proposal_id}")
+        elif st.session_state.search_emisor_nombre:
+            # Search by emisor_nombre
+            found_proposals_partial = supabase_handler.get_active_proposals_by_emisor_nombre(st.session_state.search_emisor_nombre)
+            if found_proposals_partial:
+                if 'accumulated_proposals' not in st.session_state:
+                    st.session_state.accumulated_proposals = []
+                for proposal_partial in found_proposals_partial:
+                    full_proposal_details = supabase_handler.get_proposal_details_by_id(proposal_partial['proposal_id'])
+                    if full_proposal_details and 'proposal_id' in full_proposal_details:
+                        if not any('proposal_id' in p and p['proposal_id'] == full_proposal_details['proposal_id'] for p in st.session_state.accumulated_proposals):
+                            st.session_state.accumulated_proposals.append(full_proposal_details)
+            else:
+                st.info(f"No se encontraron propuestas activas para: {st.session_state.search_emisor_nombre}")
+        else:
+            st.warning("Por favor, ingresa un ID de Propuesta o una Razón Social para buscar.")
 
-with col_paso4:
-    st.write("#### Paso 4: Imprimir Documento")
-    if st.button("IMPRIMIR Propuesta a PDF", disabled=not st.session_state.recalculate_result):
-        st.error("La lógica de impresión aún no está implementada.")
+    # Display the accumulated proposals (laundry list)
+    if 'accumulated_proposals' in st.session_state and st.session_state.accumulated_proposals:
+        st.write("##### Propuestas Seleccionadas para Consolidar:")
+        if 'selected_proposals_checkboxes' not in st.session_state:
+            st.session_state.selected_proposals_checkboxes = {}
+
+        for i, proposal in enumerate(st.session_state.accumulated_proposals):
+            if 'proposal_id' not in proposal: # Skip if proposal_id is missing
+                continue
+            checkbox_key = f"accum_prop_checkbox_{proposal['proposal_id']}"
+            if checkbox_key not in st.session_state.selected_proposals_checkboxes:
+                st.session_state.selected_proposals_checkboxes[checkbox_key] = True # Default to checked
+
+            col_check, col_id, col_emisor, col_monto = st.columns([0.1, 0.3, 0.3, 0.3])
+            with col_check:
+                st.session_state.selected_proposals_checkboxes[checkbox_key] = st.checkbox(
+                    "", value=st.session_state.selected_proposals_checkboxes[checkbox_key], key=checkbox_key
+                )
+            with col_id:
+                st.write(f"**ID:** {proposal.get('proposal_id', 'N/A')}")
+            with col_emisor:
+                st.write(f"**Emisor:** {proposal.get('invoice_issuer_name', 'N/A')}")
+            with col_monto:
+                st.write(f"**Monto:** PEN {proposal.get('initial_disbursement', 0.0):.2f}")
+
+    # Botón para generar PDF consolidado
+    if 'accumulated_proposals' in st.session_state and st.session_state.accumulated_proposals:
+        if st.button("Generar PDF Consolidado"):
+            selected_invoices_data = []
+            for proposal in st.session_state.accumulated_proposals:
+                checkbox_key = f"accum_prop_checkbox_{proposal['proposal_id']}"
+                if st.session_state.selected_proposals_checkboxes.get(checkbox_key, False):
+                    full_details = supabase_handler.get_proposal_details_by_id(proposal['proposal_id'])
+                    if full_details:
+                        selected_invoices_data.append(full_details)
+            
+            if selected_invoices_data:
+                import subprocess
+                import json
+                import time
+
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_filepath = f"C:/Users/rguti/Inandes.TECH/generated_pdfs/consolidated_invoice_{timestamp}.pdf"
+
+                invoices_json = json.dumps(selected_invoices_data)
+
+                command = [
+                    "python",
+                    "C:/Users/rguti/Inandes.TECH/backend/pdf_generator_v_cli.py",
+                    f"--output_filepath={output_filepath}",
+                    f"--invoices_json={invoices_json}"
+                ]
+
+                aplicar_comision_afiliacion_overall = any(inv.get('aplicar_comision_afiliacion', False) for inv in selected_invoices_data)
+                if aplicar_comision_afiliacion_overall:
+                    command.append("--aplicar_comision_afiliacion")
+                    total_comision_afiliacion_monto = sum(inv.get('comision_afiliacion_monto_calculado', 0) for inv in selected_invoices_data)
+                    total_igv_afiliacion = sum(inv.get('igv_afiliacion_calculado', 0) for inv in selected_invoices_data)
+                    command.append(f"--comision_afiliacion_monto_calculado={total_comision_afiliacion_monto}")
+                    command.append(f"--igv_afiliacion_calculado={total_igv_afiliacion}")
+
+                st.write("Generando PDF consolidado...")
+                try:
+                    result = subprocess.run(command, check=True, capture_output=True, text=True)
+                    st.success(f"PDF consolidado generado exitosamente en: {output_filepath}")
+                    if result.stderr:
+                        st.warning(f"Advertencias/Errores del generador de PDF: {result.stderr}")
+                except subprocess.CalledProcessError as e:
+                    st.error(f"Error al generar PDF consolidado: {e}")
+                    st.error(f"Salida del error: {e.stderr}")
+                except FileNotFoundError:
+                    st.error("Error: El script pdf_generator_v_cli.py no fue encontrado.")
+            else:
+                st.warning("No hay propuestas seleccionadas para generar el PDF.")
+
+    
