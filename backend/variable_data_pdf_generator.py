@@ -4,6 +4,22 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 import datetime
 
+def flatten_dict(d, parent_key='', sep='.'):
+    items = []
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                if isinstance(item, dict):
+                    items.extend(flatten_dict(item, f"{new_key}[{i}]", sep=sep).items())
+                else:
+                    items.append((f"{new_key}[{i}]", str(item)))
+        else:
+            items.append((new_key, str(v)))
+    return dict(items)
+
 def generate_variable_pdf(data_dict: dict, output_filepath: str):
     doc = SimpleDocTemplate(output_filepath, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -14,22 +30,24 @@ def generate_variable_pdf(data_dict: dict, output_filepath: str):
     story.append(Paragraph(f"Generado el: {datetime.datetime.now().strftime('%d-%m-%Y %H:%M:%S')}", styles['h3']))
     story.append(Spacer(1, 0.2 * letter[1])) # Add some space
 
+    # Flatten the data dictionary
+    flattened_data = flatten_dict(data_dict)
+
     # Prepare data for table
     table_data = [['Variable Name', 'Value']]
-    for key, value in data_dict.items():
-        # Handle dictionaries and lists for better readability
-        if isinstance(value, dict):
-            for sub_key, sub_value in value.items():
-                table_data.append([f"{key}.{sub_key}", str(sub_value)])
-        elif isinstance(value, list):
-            for i, item in enumerate(value):
-                table_data.append([f"{key}[{i}]", str(item)])
-        else:
-            table_data.append([str(key), str(value)])
+    for key, value in flattened_data.items():
+        table_data.append([str(key), str(value)])
 
     # Create table
     # Calculate column widths to fit content, with a max for the value column
-    col_widths = [200, 350] # Fixed width for variable name, flexible for value
+    page_width = letter[0] # Get page width
+    left_margin = 72 # Default ReportLab left margin
+    right_margin = 72 # Default ReportLab right margin
+    usable_width = page_width - left_margin - right_margin
+
+    col1_width = usable_width * 0.70
+    col2_width = usable_width * 0.30
+    col_widths = [col1_width, col2_width]
 
     table = Table(table_data, colWidths=col_widths)
 
@@ -47,6 +65,7 @@ def generate_variable_pdf(data_dict: dict, output_filepath: str):
         ('RIGHTPADDING', (0,0), (-1,-1), 6),
         ('TOPPADDING', (0,0), (-1,-1), 6),
         ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('FONTSIZE', (0,0), (-1,-1), 8), # Reduce font size to 8 points
     ]))
 
     story.append(table)
