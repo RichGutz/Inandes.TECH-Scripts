@@ -586,7 +586,7 @@ if __name__ == "__main__":
         'facturas': invoices, # Use the full list of invoices
         
         # Default values for other fields required by the template
-        'tipo_documento': 'LIQUIDACIÓN DE OPERACIÓN',
+        'tipo_documento': '',
         'contract_name': 'INANDES FACTOR CAPITAL SAC',
         'relation_type': 'FACTURA(S)',
         'anexo_number': '31', # Placeholder
