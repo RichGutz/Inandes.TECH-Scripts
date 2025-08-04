@@ -339,7 +339,7 @@ with st.expander("Buscar Propuestas para Consolidar", expanded=True):
         if st.button("Generar PDF Consolidado"):
             selected_invoices_data = []
             for proposal in st.session_state.accumulated_proposals:
-                checkbox_key = f"accum_prop_checkbox_{proposal['proposal_id']}"
+                checkbox_key = f"accum_prop_checkbox_{proposal.get('proposal_id', 'MISSING_ID')}"
                 if st.session_state.selected_proposals_checkboxes.get(checkbox_key, False):
                     full_details = supabase_handler.get_proposal_details_by_id(proposal['proposal_id'])
                     if full_details:
@@ -373,9 +373,23 @@ with st.expander("Buscar Propuestas para Consolidar", expanded=True):
                 st.write("Generando PDF consolidado...")
                 try:
                     result = subprocess.run(command, check=True, capture_output=True, text=True)
-                    st.success(f"PDF consolidado generado exitosamente en: {output_filepath}")
                     if result.stderr:
                         st.warning(f"Advertencias/Errores del generador de PDF: {result.stderr}")
+
+                    if os.path.exists(output_filepath):
+                        with open(output_filepath, "rb") as file:
+                            btn = st.download_button(
+                                label="Descargar PDF Consolidado",
+                                data=file.read(),
+                                file_name=os.path.basename(output_filepath),
+                                mime="application/pdf"
+                            )
+                        st.success(f"PDF consolidado generado. Haz clic en el botón para descargarlo.")
+                        # Clean up the generated file after offering for download
+                        os.remove(output_filepath)
+                    else:
+                        st.error("Error: El archivo PDF consolidado no se generó correctamente.")
+
                 except subprocess.CalledProcessError as e:
                     st.error(f"Error al generar PDF consolidado: {e}")
                     st.error(f"Salida del error: {e.stderr}")

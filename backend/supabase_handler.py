@@ -198,7 +198,7 @@ def get_proposal_details_by_id(proposal_id: str) -> dict:
             proposal_data = response.data[0]
             # Mapeo inverso para que coincida con los argumentos del CLI
             details = {
-                'proposal_id': proposal_data.get('proposal_id'), # Add proposal_id here
+                'proposal_id': proposal_data.get('proposal_id', proposal_id), # Ensure proposal_id is always present
                 'invoice_issuer_name': proposal_data.get('emisor_nombre'),
                 'invoice_issuer_ruc': proposal_data.get('emisor_ruc'),
                 'invoice_issuer_address': proposal_data.get('emisor_direccion', 'N/A'),
@@ -235,15 +235,14 @@ def get_proposal_details_by_id(proposal_id: str) -> dict:
                     except ValueError:
                         # Si ya está en el formato correcto o es inválido, dejarlo como está
                         pass
-            
             return details
         else:
             print(f"No se encontró ninguna propuesta con el ID: {proposal_id}")
-            return {}
+            return {'proposal_id': proposal_id} # Return with proposal_id even if not found
 
     except Exception as e:
         print(f"[ERROR en get_proposal_details_by_id]: {e}")
-        return {}
+        return {'proposal_id': proposal_id} # Return with proposal_id on error
 
 def get_active_proposals_by_emisor_nombre(emisor_nombre: str) -> list[dict]:
     """
