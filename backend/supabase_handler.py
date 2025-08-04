@@ -180,3 +180,61 @@ def save_proposal(session_data: dict) -> tuple[bool, str]:
     except Exception as e:
         print(f"[ERROR en save_proposal]: {e}")
         return False, f"Error al guardar la propuesta: {e}"
+
+def get_proposal_details_by_id(proposal_id: str) -> dict:
+    """
+    Recupera los detalles de una propuesta de factoring desde Supabase usando su proposal_id.
+    """
+    if not supabase:
+        print("Error: La conexión con Supabase no está disponible.")
+        return {}
+
+    try:
+        response = supabase.table('propuestas').select('*').eq('proposal_id', proposal_id).single().execute()
+
+        if response.data:
+            # Mapeo inverso para que coincida con los argumentos del CLI
+            details = {
+                'invoice_issuer_name': response.data.get('emisor_nombre'),
+                'invoice_issuer_ruc': response.data.get('emisor_ruc'),
+                'invoice_issuer_address': response.data.get('emisor_direccion', 'N/A'),
+                'invoice_payer_name': response.data.get('aceptante_nombre'),
+                'invoice_payer_ruc': response.data.get('aceptante_ruc'),
+                'invoice_payer_address': response.data.get('aceptante_direccion', 'N/A'),
+                'invoice_series_and_number': response.data.get('numero_factura'),
+                'invoice_currency': response.data.get('moneda_factura'),
+                'invoice_total_amount': response.data.get('monto_total_factura'),
+                'invoice_issue_date': response.data.get('fecha_emision_factura'),
+                'invoice_due_date': response.data.get('fecha_pago_calculada'),
+                'advance_rate': response.data.get('tasa_de_avance'),
+                'advance_amount': response.data.get('capital_calculado'),
+                'commission_rate': response.data.get('comision_de_estructuracion'),
+                'commission_amount': response.data.get('comision_estructuracion_monto_calculado'),
+                'interes_calculado': response.data.get('interes_calculado'),
+                'igv_interes_calculado': response.data.get('igv_interes_calculado'),
+                'initial_disbursement': response.data.get('abono_real_calculado'),
+                'financing_term_days': response.data.get('plazo_operacion_calculado'),
+                'tcea': response.data.get('tcea_calculada', 0.0),
+                'investor_name': response.data.get('nombre_inversionista', 'INANDES CAPITAL S.A.C.'),
+                'aplicar_comision_afiliacion': response.data.get('aplicar_comision_afiliacion', False),
+                'comision_afiliacion_monto_calculado': response.data.get('comision_afiliacion_monto_calculado'),
+                'igv_afiliacion_calculado': response.data.get('igv_afiliacion_calculado'),
+            }
+
+            # Formatear fechas de YYYY-MM-DD a DD-MM-YYYY
+            for key in ['invoice_issue_date', 'invoice_due_date']:
+                if details[key] and isinstance(details[key], str):
+                    try:
+                        details[key] = datetime.datetime.strptime(details[key], '%Y-%m-%d').strftime('%d-%m-%Y')
+                    except ValueError:
+                        # Si ya está en el formato correcto o es inválido, dejarlo como está
+                        pass
+            
+            return details
+        else:
+            print(f"No se encontró ninguna propuesta con el ID: {proposal_id}")
+            return {}
+
+    except Exception as e:
+        print(f"[ERROR en get_proposal_details_by_id]: {e}")
+        return {}
