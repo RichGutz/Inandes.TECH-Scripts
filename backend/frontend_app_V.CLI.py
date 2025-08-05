@@ -41,13 +41,13 @@ def validate_inputs(invoice):
         "aceptante_nombre": "Nombre del Aceptante", "aceptante_ruc": "RUC del Aceptante",
         "numero_factura": "Número de Factura", "moneda_factura": "Moneda de Factura",
         "fecha_emision_factura": "Fecha de Emisión",
-        "fecha_desembolso_factoring": "Fecha de Desembolso", "tasa_de_avance": "Tasa de Avance",
+        "tasa_de_avance": "Tasa de Avance",
         "interes_mensual": "Interés Mensual", "comision_de_estructuracion": "Comisión de Estructuración",
+        "plazo_credito_dias": "Plazo de Crédito (días)", "fecha_desembolso_factoring": "Fecha de Desembolso",
     }
     is_valid = True
     for key, name in required_fields.items():
         if not invoice.get(key):
-            st.error(f"El campo '{name}' es obligatorio para la factura {invoice.get('parsed_pdf_name', 'N/A')}.")
             is_valid = False
     
     numeric_fields = {
@@ -56,7 +56,6 @@ def validate_inputs(invoice):
     }
     for key, name in numeric_fields.items():
         if invoice.get(key, 0) <= 0:
-            st.error(f"El campo '{name}' debe ser mayor que cero para la factura {invoice.get('parsed_pdf_name', 'N/A')}.")
             is_valid = False
     return is_valid
 
@@ -117,8 +116,13 @@ with logo_col:
     st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", width=120, use_container_width=True)
 
 # --- UI: Carga de Archivos ---
-with st.expander("Cargar datos automáticamente desde PDF (Opcional)", expanded=True):
-    uploaded_pdf_files = st.file_uploader("Sube tus archivos PDF de factura", type=["pdf"], key="pdf_uploader_main", accept_multiple_files=True)
+with st.expander("", expanded=True):
+    col1, col2 = st.columns([1, 0.00001])
+    with col1:
+        uploaded_pdf_files = st.file_uploader("Seleccionar archivos", type=["pdf"], key="pdf_uploader_main", accept_multiple_files=True)
+    with col2:
+        pass # Button removed
+
     if uploaded_pdf_files:
         # Clear previous data if new files are uploaded or file IDs change
         current_file_ids = [f.file_id for f in uploaded_pdf_files]
@@ -270,8 +274,7 @@ if st.session_state.invoices_data:
                     min_value=1,
                     step=1,
                     value=invoice.get('plazo_credito_dias'), # No fallback default
-                    key=f"plazo_credito_dias_{idx}",
-                    placeholder="Ej: 30"
+                    key=f"plazo_credito_dias_{idx}"
                 )
 
             with col_fecha_desembolso:
@@ -333,15 +336,18 @@ if st.session_state.invoices_data:
         st.markdown("--- ")
 
         # --- Pasos de Cálculo y Acción (adaptado para múltiples facturas) ---
-        col_paso1, col_resultados = st.columns([1, 3]) # Narrow for button, wide for table
+        col_paso1, col_resultados = st.columns([0.2, 3.8]) # Narrow for button, wide for table
 
         with col_paso1:
-            st.write("#### Paso 1: Calcular Desembolso Inicial")
+            
 
             # The button is active only when all required fields are filled
             campos_requeridos_completos = validate_inputs(invoice)
 
-            if st.button(f"Calcular Desembolso Inicial para Factura {idx + 1}", key=f"calc_initial_disbursement_{idx}", disabled=not campos_requeridos_completos):
+            if not campos_requeridos_completos:
+                st.info("Por favor, complete todos los campos obligatorios para habilitar el cálculo.")
+
+            if st.button(f"Calcular", key=f"calc_initial_disbursement_{idx}", disabled=not campos_requeridos_completos):
                 if campos_requeridos_completos:
                     api_data = {
                         "plazo_operacion": invoice['plazo_operacion_calculado'],
@@ -397,6 +403,11 @@ if st.session_state.invoices_data:
             # CSS para reducir el tamaño de la fuente de los labels en los resultados iterativos
             st.markdown("""
             <style>
+            /* Reduce font size for the 'Calcular' button */
+            .stButton>button {
+                font-size: 0.8em; /* Adjust as needed */
+                padding: 0.25em 0.5em; /* Adjust padding to fit text */
+            }
             label {
                 font-size: 0.1em !important; /* Reducido al mínimo para prueba */
             }
@@ -432,17 +443,17 @@ if st.session_state.invoices_data:
                 lines.append("| :--- | :--- | :--- | :--- | :--- |")
                 lines.append(f"| Monto Neto de Factura | 100.00% | {monto_neto:,.2f} | `Dato de entrada` | Monto total de la factura sin IGV. |")
                 lines.append(f"| Tasa de Avance Aplicada | {tasa_avance_pct:.2f}% | N/A | `Tasa final de la operación` | N/A |")
-                lines.append(f"| Capital | {((capital / monto_neto) * 100) if monto_neto else 0:.2f}% | {capital:,.2f} | `Monto Neto * Tasa de Avance` | `{monto_neto:,.2f} * {tasa_avance_pct:.2f}%` |")
-                lines.append(f"| Intereses | {interes.get('porcentaje', 0):.2f}% | {interes.get('monto', 0):,.2f} | `Capital * ((1+TasaDiaria)^Plazo-1)` | Tasa Diaria: `{tasa_diaria_pct:.4f}%`, Plazo: `{calculos.get('plazo_operacion', 0)} días` |")
-                lines.append(f"| Comisión de Estructuración | {com_est.get('porcentaje', 0):.2f}% | {com_est.get('monto', 0):,.2f} | `MAX(Capital * %Comisión, Mínima)` | Base: `{capital * (invoice.get('comision_de_estructuracion',0)/100):.2f}`, Mín: `{invoice.get('comision_minima_pen',0) if moneda == 'PEN' else invoice.get('comision_minima_usd',0)}` |")
+                lines.append(f"| Capital | {((capital / monto_neto) * 100) if monto_neto else 0:.2f}% | {capital:,.2f} | `Monto Neto * (Tasa de Avance / 100)` | `{monto_neto:,.2f} * ({tasa_avance_pct:.2f} / 100) = {capital:,.2f}` |")
+                lines.append(f"| Intereses | {interes.get('porcentaje', 0):.2f}% | {interes.get('monto', 0):,.2f} | `Capital * ((1 + Tasa Diaria)^Plazo - 1)` | Tasa Diaria: `{invoice.get('interes_mensual', 0):.2f}% / 30 = {tasa_diaria_pct:.4f}%`, Plazo: `{calculos.get('plazo_operacion', 0)} días`. Cálculo: `{capital:,.2f} * ((1 + {tasa_diaria_pct/100:.6f})^{calculos.get('plazo_operacion', 0)} - 1) = {interes.get('monto', 0):,.2f}` |")
+                lines.append(f"| Comisión de Estructuración | {com_est.get('porcentaje', 0):.2f}% | {com_est.get('monto', 0):,.2f} | `MAX(Capital * %Comisión, Mínima)` | Base: `{capital:,.2f} * ({invoice.get('comision_de_estructuracion',0):.2f} / 100) = {capital * (invoice.get('comision_de_estructuracion',0)/100):.2f}`, Mín: `{invoice.get('comision_minima_pen',0) if moneda == 'PEN' else invoice.get('comision_minima_usd',0):.2f}`. Resultado: `{com_est.get('monto', 0):,.2f}` |")
                 if com_afi.get('monto', 0) > 0:
                     lines.append(f"| Comisión de Afiliación | {com_afi.get('porcentaje', 0):.2f}% | {com_afi.get('monto', 0):,.2f} | `Valor Fijo (si aplica)` | Monto fijo para la moneda {moneda}. |")
-                lines.append(f"| IGV Total | {igv.get('porcentaje', 0):.2f}% | {igv.get('monto', 0):,.2f} | `(Intereses + Comisiones) * 18%` | IGV Int: `{calculos.get('igv_interes',0):.2f}`, IGV ComEst: `{calculos.get('igv_comision_estructuracion',0):.2f}`, IGV ComAfil: `{calculos.get('igv_afiliacion',0):.2f}` |")
+                lines.append(f"| IGV Total | {igv.get('porcentaje', 0):.2f}% | {igv.get('monto', 0):,.2f} | `(Intereses + Comisiones) * 18%` | IGV Int: `{calculos.get('igv_interes',0):.2f}`, IGV ComEst: `{calculos.get('igv_comision_estructuracion',0):.2f}`, IGV ComAfil: `{calculos.get('igv_afiliacion',0):.2f}`. Total: `{calculos.get('igv_interes',0) + calculos.get('igv_comision_estructuracion',0) + calculos.get('igv_afiliacion',0):,.2f}` |")
                 lines.append("| | | | | |")
-                lines.append(f"| **Monto a Desembolsar** | **{abono.get('porcentaje', 0):.2f}%** | **{abono.get('monto', 0):,.2f}** | `Capital - Costos Totales` | `{capital:,.2f} - {costos_totales:,.2f}` |")
-                lines.append(f"| Margen de Seguridad | {margen.get('porcentaje', 0):.2f}% | {margen.get('monto', 0):,.2f} | `Monto Neto - Capital` | `{monto_neto:,.2f} - {capital:,.2f}` |")
+                lines.append(f"| **Monto a Desembolsar** | **{abono.get('porcentaje', 0):.2f}%** | **{abono.get('monto', 0):,.2f}** | `Capital - Costos Totales` | `{capital:,.2f} - {costos_totales:,.2f} = {abono.get('monto', 0):,.2f}` |")
+                lines.append(f"| Margen de Seguridad | {margen.get('porcentaje', 0):.2f}% | {margen.get('monto', 0):,.2f} | `Monto Neto - Capital` | `{monto_neto:,.2f} - {capital:,.2f} = {margen.get('monto', 0):,.2f}` |")
                 lines.append("| | | | | |")
-                lines.append(f"| **Total (Monto Neto Factura)** | **100.00%** | **{monto_neto:,.2f}** | `Abono + Costos + Margen` | Verificación de suma de componentes. |")
+                lines.append(f"| **Total (Monto Neto Factura)** | **100.00%** | **{monto_neto:,.2f}** | `Abono + Costos + Margen` | `{abono.get('monto', 0):,.2f} + {costos_totales:,.2f} + {margen.get('monto', 0):,.2f} = {monto_neto:,.2f}` |")
                 
                 tabla_md = "\n".join(lines)
                 st.markdown(tabla_md, unsafe_allow_html=True)
