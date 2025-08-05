@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi.middleware.cors import CORSMiddleware
 
 # Importar las nuevas funciones de la calculadora
-from calculadora_factoring import calcular_desembolso_inicial, encontrar_tasa_de_avance
+from calculadora_factoring_V_CLI import calcular_desembolso_inicial, encontrar_tasa_de_avance
 
 app = FastAPI(
     title="API de Calculadora de Factoring INANDES",

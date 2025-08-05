@@ -61,33 +61,30 @@ def validate_inputs(invoice):
     return is_valid
 
 def propagate_commission_changes():
-    print("propagate_commission_changes called!")
-    if st.session_state.invoices_data:
-        # Get values from the first invoice (index 0)
+    # This function is called on_change. It will trigger a rerun.
+    # On the next run, the UI will be updated based on the new state.
+    if st.session_state.get('fijar_condiciones', False) and st.session_state.invoices_data and len(st.session_state.invoices_data) > 1:
+        # Get the most recent values directly from the session state of the first invoice's widgets
+        # This ensures we are using the value that just changed, before the full rerun.
         first_invoice = st.session_state.invoices_data[0]
-        tasa_de_avance = first_invoice['tasa_de_avance']
-        interes_mensual = first_invoice['interes_mensual']
-        comision_de_estructuracion = first_invoice['comision_de_estructuracion']
-        comision_minima_pen = first_invoice['comision_minima_pen']
-        comision_minima_usd = first_invoice['comision_minima_usd']
-        comision_afiliacion_pen = first_invoice['comision_afiliacion_pen']
-        comision_afiliacion_usd = first_invoice['comision_afiliacion_usd']
-        aplicar_comision_afiliacion = first_invoice['aplicar_comision_afiliacion']
+        first_invoice['tasa_de_avance'] = st.session_state.get(f"tasa_de_avance_0", first_invoice['tasa_de_avance'])
+        first_invoice['interes_mensual'] = st.session_state.get(f"interes_mensual_0", first_invoice['interes_mensual'])
+        first_invoice['comision_de_estructuracion'] = st.session_state.get(f"comision_de_estructuracion_0", first_invoice['comision_de_estructuracion'])
+        first_invoice['comision_minima_pen'] = st.session_state.get(f"comision_minima_pen_0", first_invoice['comision_minima_pen'])
+        first_invoice['comision_minima_usd'] = st.session_state.get(f"comision_minima_usd_0", first_invoice['comision_minima_usd'])
+        first_invoice['comision_afiliacion_pen'] = st.session_state.get(f"comision_afiliacion_pen_0", first_invoice['comision_afiliacion_pen'])
+        first_invoice['comision_afiliacion_usd'] = st.session_state.get(f"comision_afiliacion_usd_0", first_invoice['comision_afiliacion_usd'])
 
-        # Propagate to all other invoices (from index 1 onwards)
+        # Now that the first invoice's dictionary is up-to-date, propagate its values
         for i in range(1, len(st.session_state.invoices_data)):
-            current_invoice = st.session_state.invoices_data[i]
-            current_invoice['tasa_de_avance'] = tasa_de_avance
-            current_invoice['interes_mensual'] = interes_mensual
-            current_invoice['comision_de_estructuracion'] = comision_de_estructuracion
-            current_invoice['comision_minima_pen'] = comision_minima_pen
-            current_invoice['comision_minima_usd'] = comision_minima_usd
-            current_invoice['comision_afiliacion_pen'] = comision_afiliacion_pen
-            current_invoice['comision_afiliacion_usd'] = comision_afiliacion_usd
-            current_invoice['aplicar_comision_afiliacion'] = aplicar_comision_afiliacion
-
-        # Force a rerun to ensure UI updates immediately
-        st.rerun()
+            invoice = st.session_state.invoices_data[i]
+            invoice['tasa_de_avance'] = first_invoice['tasa_de_avance']
+            invoice['interes_mensual'] = first_invoice['interes_mensual']
+            invoice['comision_de_estructuracion'] = first_invoice['comision_de_estructuracion']
+            invoice['comision_minima_pen'] = first_invoice['comision_minima_pen']
+            invoice['comision_minima_usd'] = first_invoice['comision_minima_usd']
+            invoice['comision_afiliacion_pen'] = first_invoice['comision_afiliacion_pen']
+            invoice['comision_afiliacion_usd'] = first_invoice['comision_afiliacion_usd']
 
 # --- Inicialización del Session State ---
 
@@ -96,6 +93,7 @@ if 'invoices_data' not in st.session_state: st.session_state.invoices_data = []
 if 'pdf_datos_cargados' not in st.session_state: st.session_state.pdf_datos_cargados = False
 if 'last_uploaded_pdf_files_ids' not in st.session_state: st.session_state.last_uploaded_pdf_files_ids = []
 if 'last_saved_proposal_id' not in st.session_state: st.session_state.last_saved_proposal_id = ''
+if 'fijar_condiciones' not in st.session_state: st.session_state.fijar_condiciones = False
 # Default values for new invoices (these will be copied into each invoice's dict)
 if 'default_comision_afiliacion_pen' not in st.session_state: st.session_state.default_comision_afiliacion_pen = 200.0
 if 'default_comision_afiliacion_usd' not in st.session_state: st.session_state.default_comision_afiliacion_usd = 50.0
@@ -154,8 +152,8 @@ with st.expander("Cargar datos automáticamente desde PDF (Opcional)", expanded=
                                 'file_id': uploaded_file.file_id,
                                 'emisor_nombre': '',
                                 'aceptante_nombre': '',
-                                'plazo_credito_dias': 30, # Default value
-                                'fecha_desembolso_factoring': datetime.date.today().strftime('%d-%m-%Y'), # Default value
+                                'plazo_credito_dias': None,
+                                'fecha_desembolso_factoring': '',
                                 'tasa_de_avance': st.session_state.default_tasa_de_avance,
                                 'interes_mensual': st.session_state.default_interes_mensual,
                                 'comision_de_estructuracion': st.session_state.default_comision_de_estructuracion,
@@ -233,15 +231,69 @@ if st.session_state.invoices_data:
         # Fechas y Plazos
         with st.container():
             st.write("##### Fechas y Plazos")
+
+            # Helper to parse date string to date object, returns None on failure
+            def to_date_obj(date_str):
+                if not date_str or not isinstance(date_str, str): return None
+                try:
+                    return datetime.datetime.strptime(date_str, '%d-%m-%Y').date()
+                except (ValueError, TypeError):
+                    return None
+
             col_fecha_emision, col_plazo_credito, col_fecha_pago, col_fecha_desembolso, col_plazo_operacion = st.columns(5)
+
             with col_fecha_emision:
-                invoice['fecha_emision_factura'] = st.text_input("Fecha de Emisión (DD-MM-YYYY)", value=invoice.get('fecha_emision_factura', ''), key=f"fecha_emision_factura_{idx}", on_change=update_date_calculations, args=(invoice,), label_visibility="visible")
+                fecha_emision_obj = to_date_obj(invoice.get('fecha_emision_factura'))
+                
+                # Disable the input if a date was successfully parsed from the PDF
+                is_disabled = bool(fecha_emision_obj)
+
+                nueva_fecha_emision_obj = st.date_input(
+                    "Fecha de Emisión",
+                    value=fecha_emision_obj,
+                    key=f"fecha_emision_factura_{idx}",
+                    format="DD-MM-YYYY",
+                    disabled=is_disabled
+                )
+
+                # If the field is enabled (i.e., not parsed from PDF), update the session state with the user's input
+                if not is_disabled:
+                    if nueva_fecha_emision_obj:
+                        invoice['fecha_emision_factura'] = nueva_fecha_emision_obj.strftime('%d-%m-%Y')
+                    else:
+                        # If the user clears the date, set it to an empty string
+                        invoice['fecha_emision_factura'] = ''
+
             with col_plazo_credito:
-                invoice['plazo_credito_dias'] = st.number_input("Plazo de Crédito (días)", min_value=1, step=1, value=invoice.get('plazo_credito_dias', 30), key=f"plazo_credito_dias_{idx}", on_change=update_date_calculations, args=(invoice,), label_visibility="visible")
+                invoice['plazo_credito_dias'] = st.number_input(
+                    "Plazo de Crédito (días)",
+                    min_value=1,
+                    step=1,
+                    value=invoice.get('plazo_credito_dias'), # No fallback default
+                    key=f"plazo_credito_dias_{idx}",
+                    placeholder="Ej: 30"
+                )
+
+            with col_fecha_desembolso:
+                fecha_desembolso_obj = to_date_obj(invoice.get('fecha_desembolso_factoring'))
+                nueva_fecha_desembolso_obj = st.date_input(
+                    "Fecha de Desembolso",
+                    value=fecha_desembolso_obj,
+                    key=f"fecha_desembolso_factoring_{idx}",
+                    format="DD-MM-YYYY"
+                )
+                if nueva_fecha_desembolso_obj:
+                    invoice['fecha_desembolso_factoring'] = nueva_fecha_desembolso_obj.strftime('%d-%m-%Y')
+                else:
+                    invoice['fecha_desembolso_factoring'] = ''
+
+            # --- Dynamic Calculation ---
+            # This function is called on every script rerun, ensuring calculations are always up-to-date
+            update_date_calculations(invoice)
+
             with col_fecha_pago:
                 st.text_input("Fecha de Pago (Calculada)", value=invoice.get('fecha_pago_calculada', ''), disabled=True, key=f"fecha_pago_calculada_{idx}", label_visibility="visible")
-            with col_fecha_desembolso:
-                invoice['fecha_desembolso_factoring'] = st.text_input("Fecha de Desembolso (DD-MM-YYYY)", value=invoice.get('fecha_desembolso_factoring', datetime.date.today().strftime('%d-%m-%Y')), key=f"fecha_desembolso_factoring_{idx}", on_change=update_date_calculations, args=(invoice,), label_visibility="visible")
+
             with col_plazo_operacion:
                 st.number_input("Plazo de Operación (días)", value=invoice.get('plazo_operacion_calculado', 0), disabled=True, key=f"plazo_operacion_calculado_{idx}", label_visibility="visible")
 
@@ -249,29 +301,45 @@ if st.session_state.invoices_data:
         with st.container():
             st.write("##### Tasas y Comisiones")
             st.write("") # Empty row for spacing
+
+            # Determine if fields should be disabled (i.e., if it's not the first invoice and conditions are fixed)
+            is_disabled = idx > 0 and st.session_state.fijar_condiciones
+
             col_tasa_avance, col_interes_mensual, col_comision_estructuracion, col_comision_min_pen, col_comision_min_usd, col_comision_afil_pen, col_comision_afil_usd = st.columns([0.8, 0.8, 1.4, 1, 1, 1, 1])
             with col_tasa_avance:
-                invoice['tasa_de_avance'] = st.number_input("Tasa de Avance (%)", min_value=0.0, value=invoice.get('tasa_de_avance', st.session_state.default_tasa_de_avance), format="%.2f", key=f"tasa_de_avance_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
+                invoice['tasa_de_avance'] = st.number_input("Tasa de Avance (%)", min_value=0.0, value=invoice.get('tasa_de_avance', st.session_state.default_tasa_de_avance), format="%.2f", key=f"tasa_de_avance_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
             with col_interes_mensual:
-                invoice['interes_mensual'] = st.number_input("Interés Mensual (%)", min_value=0.0, value=invoice.get('interes_mensual', st.session_state.default_interes_mensual), format="%.2f", key=f"interes_mensual_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
+                invoice['interes_mensual'] = st.number_input("Interés Mensual (%)", min_value=0.0, value=invoice.get('interes_mensual', st.session_state.default_interes_mensual), format="%.2f", key=f"interes_mensual_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
             with col_comision_estructuracion:
-                invoice['comision_de_estructuracion'] = st.number_input("Comisión de Estructuración (%)", min_value=0.0, value=invoice.get('comision_de_estructuracion', st.session_state.default_comision_de_estructuracion), format="%.2f", key=f"comision_de_estructuracion_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
+                invoice['comision_de_estructuracion'] = st.number_input("Comisión de Estructuración (%)", min_value=0.0, value=invoice.get('comision_de_estructuracion', st.session_state.default_comision_de_estructuracion), format="%.2f", key=f"comision_de_estructuracion_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
             with col_comision_min_pen:
-                invoice['comision_minima_pen'] = st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=invoice.get('comision_minima_pen', st.session_state.default_comision_minima_pen), format="%.2f", key=f"comision_minima_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
+                invoice['comision_minima_pen'] = st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=invoice.get('comision_minima_pen', st.session_state.default_comision_minima_pen), format="%.2f", key=f"comision_minima_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
             with col_comision_min_usd:
-                invoice['comision_minima_usd'] = st.number_input("Comisión Mínima (USD)", min_value=0.0, value=invoice.get('comision_minima_usd', st.session_state.default_comision_minima_usd), format="%.2f", key=f"comision_minima_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
+                invoice['comision_minima_usd'] = st.number_input("Comisión Mínima (USD)", min_value=0.0, value=invoice.get('comision_minima_usd', st.session_state.default_comision_minima_usd), format="%.2f", key=f"comision_minima_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
             with col_comision_afil_pen:
-                invoice['comision_afiliacion_pen'] = st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=invoice.get('comision_afiliacion_pen', st.session_state.default_comision_afiliacion_pen), format="%.2f", key=f"comision_afiliacion_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
+                invoice['comision_afiliacion_pen'] = st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=invoice.get('comision_afiliacion_pen', st.session_state.default_comision_afiliacion_pen), format="%.2f", key=f"comision_afiliacion_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
             with col_comision_afil_usd:
-                invoice['comision_afiliacion_usd'] = st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=invoice.get('comision_afiliacion_usd', st.session_state.default_comision_afiliacion_usd), format="%.2f", key=f"comision_afiliacion_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
-        invoice['aplicar_comision_afiliacion'] = st.checkbox("Aplicar Comisión de Afiliación", value=invoice.get('aplicar_comision_afiliacion', False), key=f"aplicar_comision_afiliacion_{idx}", on_change=propagate_commission_changes if idx == 0 else None)
+                invoice['comision_afiliacion_usd'] = st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=invoice.get('comision_afiliacion_usd', st.session_state.default_comision_afiliacion_usd), format="%.2f", key=f"comision_afiliacion_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
+
+        # Checkboxes are placed after the main commission inputs
+        col_fijar, col_afiliacion = st.columns(2)
+        with col_fijar:
+            # The "Fijar condiciones" checkbox is only shown for the first invoice
+            if idx == 0:
+                st.checkbox("Fijar condiciones", key='fijar_condiciones', on_change=propagate_commission_changes)
+        with col_afiliacion:
+            invoice['aplicar_comision_afiliacion'] = st.checkbox("Aplicar Comisión de Afiliación", value=invoice.get('aplicar_comision_afiliacion', False), key=f"aplicar_comision_afiliacion_{idx}")
 
         st.markdown("--- ")
 
         # --- Pasos de Cálculo y Acción (adaptado para múltiples facturas) ---
         st.write("#### Paso 1: Calcular Desembolso Inicial")
-        if st.button(f"Calcular Desembolso Inicial para Factura {idx + 1}", key=f"calc_initial_disbursement_{idx}"):
-            if validate_inputs(invoice):
+
+        # The button is active only when all required fields are filled
+        campos_requeridos_completos = validate_inputs(invoice)
+
+        if st.button(f"Calcular Desembolso Inicial para Factura {idx + 1}", key=f"calc_initial_disbursement_{idx}", disabled=not campos_requeridos_completos):
+            if campos_requeridos_completos:
                 api_data = {
                     "plazo_operacion": invoice['plazo_operacion_calculado'],
                     "mfn": invoice['monto_neto_factura'],
@@ -333,37 +401,49 @@ if st.session_state.invoices_data:
         </style>
         """, unsafe_allow_html=True)
 
-        if invoice['recalculate_result']:
-            st.write("##### Resultados del Cálculo Iterativo")
+        if invoice.get('recalculate_result'):
+            st.write("##### Resultados del Cálculo")
             recalc_result = invoice['recalculate_result']
+            desglose = recalc_result.get('desglose_final_detallado', {})
+            calculos = recalc_result.get('calculo_con_tasa_encontrada', {})
+            busqueda = recalc_result.get('resultado_busqueda', {})
+            moneda = invoice.get('moneda_factura', 'PEN')
 
-            # Define the order and labels for the results
-            results_data = [
-                ("Tasa de Avance Encontrada", recalc_result.get('resultado_busqueda', {}).get('tasa_avance_encontrada', 0.0) * 100, ".2f"),
-                ("Monto Desembolsar Objetivo", recalc_result.get('resultado_busqueda', {}).get('monto_objetivo', 0.0), ".2f"),
-                ("Capital", recalc_result.get('calculo_con_tasa_encontrada', {}).get('capital', 0.0), ".2f"),
-                ("Interés", recalc_result.get('calculo_con_tasa_encontrada', {}).get('interes', 0.0), ".2f"),
-                ("IGV Interés", recalc_result.get('calculo_con_tasa_encontrada', {}).get('igv_interes', 0.0), ".2f"),
-                ("Comisión Estructuración", recalc_result.get('calculo_con_tasa_encontrada', {}).get('comision_estructuracion', 0.0), ".2f"),
-                ("IGV Comisión Estructuración", recalc_result.get('calculo_con_tasa_encontrada', {}).get('igv_comision_estructuracion', 0.0), ".2f"),
-                ("Comisión Afiliación", recalc_result.get('calculo_con_tasa_encontrada', {}).get('comision_afiliacion', 0.0), ".2f"),
-                ("IGV Afiliación", recalc_result.get('igv_afiliacion', 0.0), ".2f"),
-                ("Margen Seguridad", recalc_result.get('calculo_con_tasa_encontrada', {}).get('margen_seguridad', 0.0), ".2f"),
-            ]
+            # --- Preparar todos los datos necesarios ---
+            tasa_avance_pct = busqueda.get('tasa_avance_encontrada', 0) * 100
+            monto_neto = invoice.get('monto_neto_factura', 0)
+            capital = calculos.get('capital', 0)
+            
+            abono = desglose.get('abono', {})
+            interes = desglose.get('interes', {})
+            com_est = desglose.get('comision_estructuracion', {})
+            com_afi = desglose.get('comision_afiliacion', {})
+            igv = desglose.get('igv_total', {})
+            margen = desglose.get('margen_seguridad', {})
 
-            # Create two rows of 5 columns each for the results
-            cols_results_row1 = st.columns(5)
-            for i, (label, value, format_str) in enumerate(results_data[:5]):
-                with cols_results_row1[i]:
-                    st.metric(label, value=format(value, format_str))
+            costos_totales = interes.get('monto', 0) + com_est.get('monto', 0) + com_afi.get('monto', 0) + igv.get('monto', 0)
+            tasa_diaria_pct = (invoice.get('interes_mensual', 0) / 30) 
 
-            cols_results_row2 = st.columns(5)
-            for i, (label, value, format_str) in enumerate(results_data[5:]):
-                with cols_results_row2[i]:
-                    st.metric(label, value=format(value, format_str))
-
-else:
-    st.info("Carga uno o más archivos PDF para comenzar.")
+            # --- Construir la tabla en Markdown línea por línea para evitar errores de formato ---
+            lines = []
+            lines.append(f"| Item | % sobre Neto | Monto ({moneda}) | Fórmula de Cálculo | Detalle del Cálculo |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- |")
+            lines.append(f"| Monto Neto de Factura | 100.00% | {monto_neto:,.2f} | `Dato de entrada` | Monto total de la factura sin IGV. |")
+            lines.append(f"| Tasa de Avance Aplicada | {tasa_avance_pct:.2f}% | N/A | `Tasa final de la operación` | N/A |")
+            lines.append(f"| Capital | {((capital / monto_neto) * 100) if monto_neto else 0:.2f}% | {capital:,.2f} | `Monto Neto * Tasa de Avance` | `{monto_neto:,.2f} * {tasa_avance_pct:.2f}%` |")
+            lines.append(f"| Intereses | {interes.get('porcentaje', 0):.2f}% | {interes.get('monto', 0):,.2f} | `Capital * ((1+TasaDiaria)^Plazo-1)` | Tasa Diaria: `{tasa_diaria_pct:.4f}%`, Plazo: `{calculos.get('plazo_operacion', 0)} días` |")
+            lines.append(f"| Comisión de Estructuración | {com_est.get('porcentaje', 0):.2f}% | {com_est.get('monto', 0):,.2f} | `MAX(Capital * %Comisión, Mínima)` | Base: `{capital * (invoice.get('comision_de_estructuracion',0)/100):.2f}`, Mín: `{invoice.get('comision_minima_pen',0) if moneda == 'PEN' else invoice.get('comision_minima_usd',0)}` |")
+            if com_afi.get('monto', 0) > 0:
+                lines.append(f"| Comisión de Afiliación | {com_afi.get('porcentaje', 0):.2f}% | {com_afi.get('monto', 0):,.2f} | `Valor Fijo (si aplica)` | Monto fijo para la moneda {moneda}. |")
+            lines.append(f"| IGV Total | {igv.get('porcentaje', 0):.2f}% | {igv.get('monto', 0):,.2f} | `(Intereses + Comisiones) * 18%` | IGV Int: `{calculos.get('igv_interes',0):.2f}`, IGV ComEst: `{calculos.get('igv_comision_estructuracion',0):.2f}`, IGV ComAfil: `{calculos.get('igv_afiliacion',0):.2f}` |")
+            lines.append("| | | | | |")
+            lines.append(f"| **Monto a Desembolsar** | **{abono.get('porcentaje', 0):.2f}%** | **{abono.get('monto', 0):,.2f}** | `Capital - Costos Totales` | `{capital:,.2f} - {costos_totales:,.2f}` |")
+            lines.append(f"| Margen de Seguridad | {margen.get('porcentaje', 0):.2f}% | {margen.get('monto', 0):,.2f} | `Monto Neto - Capital` | `{monto_neto:,.2f} - {capital:,.2f}` |")
+            lines.append("| | | | | |")
+            lines.append(f"| **Total (Monto Neto Factura)** | **100.00%** | **{monto_neto:,.2f}** | `Abono + Costos + Margen` | Verificación de suma de componentes. |")
+            
+            tabla_md = "\n".join(lines)
+            st.markdown(tabla_md, unsafe_allow_html=True)
 
 
 # --- UI: Consulta y Selección de Propuestas ---
