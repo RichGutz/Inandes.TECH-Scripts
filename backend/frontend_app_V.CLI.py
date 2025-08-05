@@ -333,117 +333,121 @@ if st.session_state.invoices_data:
         st.markdown("--- ")
 
         # --- Pasos de Cálculo y Acción (adaptado para múltiples facturas) ---
-        st.write("#### Paso 1: Calcular Desembolso Inicial")
+        col_paso1, col_resultados = st.columns([1, 3]) # Narrow for button, wide for table
 
-        # The button is active only when all required fields are filled
-        campos_requeridos_completos = validate_inputs(invoice)
+        with col_paso1:
+            st.write("#### Paso 1: Calcular Desembolso Inicial")
 
-        if st.button(f"Calcular Desembolso Inicial para Factura {idx + 1}", key=f"calc_initial_disbursement_{idx}", disabled=not campos_requeridos_completos):
-            if campos_requeridos_completos:
-                api_data = {
-                    "plazo_operacion": invoice['plazo_operacion_calculado'],
-                    "mfn": invoice['monto_neto_factura'],
-                    "tasa_avance": invoice['tasa_de_avance'] / 100,
-                    "interes_mensual": invoice['interes_mensual'] / 100,
-                    "comision_estructuracion_pct": invoice['comision_de_estructuracion'] / 100,
-                    "moneda_factura": invoice['moneda_factura'],
-                    "comision_min_pen": invoice['comision_minima_pen'],
-                    "comision_min_usd": invoice['comision_minima_usd'],
-                    "igv_pct": 0.18,
-                    "comision_afiliacion_valor": invoice['comision_afiliacion_pen'],
-                    "comision_afiliacion_usd_valor": invoice['comision_afiliacion_usd'],
-                    "aplicar_comision_afiliacion": invoice['aplicar_comision_afiliacion'],
-                    "monto_desembolsar_manual": 0
-                }
-                with st.spinner(f'Calculando desembolso para Factura {idx + 1}...'):
-                    try:
-                        response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
-                        response.raise_for_status()
-                        invoice['initial_calc_result'] = response.json()
+            # The button is active only when all required fields are filled
+            campos_requeridos_completos = validate_inputs(invoice)
 
-                        # Automatizar el Paso 2
-                        if invoice['initial_calc_result'] and 'abono_real_teorico' in invoice['initial_calc_result']:
-                            abono_real_teorico = invoice['initial_calc_result']['abono_real_teorico']
-                            monto_desembolsar_objetivo = (abono_real_teorico // 10) * 10 # Redondear a la decena inferior
+            if st.button(f"Calcular Desembolso Inicial para Factura {idx + 1}", key=f"calc_initial_disbursement_{idx}", disabled=not campos_requeridos_completos):
+                if campos_requeridos_completos:
+                    api_data = {
+                        "plazo_operacion": invoice['plazo_operacion_calculado'],
+                        "mfn": invoice['monto_neto_factura'],
+                        "tasa_avance": invoice['tasa_de_avance'] / 100,
+                        "interes_mensual": invoice['interes_mensual'] / 100,
+                        "comision_estructuracion_pct": invoice['comision_de_estructuracion'] / 100,
+                        "moneda_factura": invoice['moneda_factura'],
+                        "comision_min_pen": invoice['comision_minima_pen'],
+                        "comision_min_usd": invoice['comision_minima_usd'],
+                        "igv_pct": 0.18,
+                        "comision_afiliacion_valor": invoice['comision_afiliacion_pen'],
+                        "comision_afiliacion_usd_valor": invoice['comision_afiliacion_usd'],
+                        "aplicar_comision_afiliacion": invoice['aplicar_comision_afiliacion'],
+                        "monto_desembolsar_manual": 0
+                    }
+                    with st.spinner(f'Calculando desembolso para Factura {idx + 1}...'):
+                        try:
+                            response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
+                            response.raise_for_status()
+                            invoice['initial_calc_result'] = response.json()
 
-                            api_data_recalculate = {
-                                "plazo_operacion": invoice['plazo_operacion_calculado'],
-                                "mfn": invoice['monto_neto_factura'],
-                                "interes_mensual": invoice['interes_mensual'] / 100,
-                                "comision_estructuracion_pct": invoice['comision_de_estructuracion'] / 100,
-                                "moneda_factura": invoice['moneda_factura'],
-                                "comision_min_pen": invoice['comision_minima_pen'],
-                                "comision_min_usd": invoice['comision_minima_usd'],
-                                "igv_pct": 0.18,
-                                "comision_afiliacion_valor": invoice['comision_afiliacion_pen'],
-                                "comision_afiliacion_usd_valor": invoice['comision_afiliacion_usd'],
-                                "aplicar_comision_afiliacion": invoice['aplicar_comision_afiliacion'],
-                                "monto_objetivo": monto_desembolsar_objetivo
-                            }
-                            with st.spinner(f'Buscando tasa de avance automáticamente para Factura {idx + 1}...'):
-                                response_recalculate = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data_recalculate)
-                                response_recalculate.raise_for_status()
-                                invoice['recalculate_result'] = response_recalculate.json()
-                        else:
-                            invoice['recalculate_result'] = None
+                            # Automatizar el Paso 2
+                            if invoice['initial_calc_result'] and 'abono_real_teorico' in invoice['initial_calc_result']:
+                                abono_real_teorico = invoice['initial_calc_result']['abono_real_teorico']
+                                monto_desembolsar_objetivo = (abono_real_teorico // 10) * 10 # Redondear a la decena inferior
 
-                    except requests.exceptions.RequestException as e:
-                        st.error(f"Error de conexión con la API para Factura {idx + 1}: {e}")
+                                api_data_recalculate = {
+                                    "plazo_operacion": invoice['plazo_operacion_calculado'],
+                                    "mfn": invoice['monto_neto_factura'],
+                                    "interes_mensual": invoice['interes_mensual'] / 100,
+                                    "comision_estructuracion_pct": invoice['comision_de_estructuracion'] / 100,
+                                    "moneda_factura": invoice['moneda_factura'],
+                                    "comision_min_pen": invoice['comision_minima_pen'],
+                                    "comision_min_usd": invoice['comision_minima_usd'],
+                                    "igv_pct": 0.18,
+                                    "comision_afiliacion_valor": invoice['comision_afiliacion_pen'],
+                                    "comision_afiliacion_usd_valor": invoice['comision_afiliacion_usd'],
+                                    "aplicar_comision_afiliacion": invoice['aplicar_comision_afiliacion'],
+                                    "monto_objetivo": monto_desembolsar_objetivo
+                                }
+                                with st.spinner(f'Buscando tasa de avance automáticamente para Factura {idx + 1}...'):
+                                    response_recalculate = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data_recalculate)
+                                    response_recalculate.raise_for_status()
+                                    invoice['recalculate_result'] = response_recalculate.json()
+                            else:
+                                invoice['recalculate_result'] = None
+
+                        except requests.exceptions.RequestException as e:
+                            st.error(f"Error de conexión con la API para Factura {idx + 1}: {e}")
+
+        with col_resultados:
+            # CSS para reducir el tamaño de la fuente de los labels en los resultados iterativos
+            st.markdown("""
+            <style>
+            label {
+                font-size: 0.1em !important; /* Reducido al mínimo para prueba */
+            }
+            </style>
+            """, unsafe_allow_html=True)
+
+            if invoice.get('recalculate_result'):
+                st.write("##### Resultados del Cálculo")
+                recalc_result = invoice['recalculate_result']
+                desglose = recalc_result.get('desglose_final_detallado', {})
+                calculos = recalc_result.get('calculo_con_tasa_encontrada', {})
+                busqueda = recalc_result.get('resultado_busqueda', {})
+                moneda = invoice.get('moneda_factura', 'PEN')
+
+                # --- Preparar todos los datos necesarios ---
+                tasa_avance_pct = busqueda.get('tasa_avance_encontrada', 0) * 100
+                monto_neto = invoice.get('monto_neto_factura', 0)
+                capital = calculos.get('capital', 0)
+                
+                abono = desglose.get('abono', {})
+                interes = desglose.get('interes', {})
+                com_est = desglose.get('comision_estructuracion', {})
+                com_afi = desglose.get('comision_afiliacion', {})
+                igv = desglose.get('igv_total', {})
+                margen = desglose.get('margen_seguridad', {})
+
+                costos_totales = interes.get('monto', 0) + com_est.get('monto', 0) + com_afi.get('monto', 0) + igv.get('monto', 0)
+                tasa_diaria_pct = (invoice.get('interes_mensual', 0) / 30) 
+
+                # --- Construir la tabla en Markdown línea por línea para evitar errores de formato ---
+                lines = []
+                lines.append(f"| Item | % sobre Neto | Monto ({moneda}) | Fórmula de Cálculo | Detalle del Cálculo |")
+                lines.append("| :--- | :--- | :--- | :--- | :--- |")
+                lines.append(f"| Monto Neto de Factura | 100.00% | {monto_neto:,.2f} | `Dato de entrada` | Monto total de la factura sin IGV. |")
+                lines.append(f"| Tasa de Avance Aplicada | {tasa_avance_pct:.2f}% | N/A | `Tasa final de la operación` | N/A |")
+                lines.append(f"| Capital | {((capital / monto_neto) * 100) if monto_neto else 0:.2f}% | {capital:,.2f} | `Monto Neto * Tasa de Avance` | `{monto_neto:,.2f} * {tasa_avance_pct:.2f}%` |")
+                lines.append(f"| Intereses | {interes.get('porcentaje', 0):.2f}% | {interes.get('monto', 0):,.2f} | `Capital * ((1+TasaDiaria)^Plazo-1)` | Tasa Diaria: `{tasa_diaria_pct:.4f}%`, Plazo: `{calculos.get('plazo_operacion', 0)} días` |")
+                lines.append(f"| Comisión de Estructuración | {com_est.get('porcentaje', 0):.2f}% | {com_est.get('monto', 0):,.2f} | `MAX(Capital * %Comisión, Mínima)` | Base: `{capital * (invoice.get('comision_de_estructuracion',0)/100):.2f}`, Mín: `{invoice.get('comision_minima_pen',0) if moneda == 'PEN' else invoice.get('comision_minima_usd',0)}` |")
+                if com_afi.get('monto', 0) > 0:
+                    lines.append(f"| Comisión de Afiliación | {com_afi.get('porcentaje', 0):.2f}% | {com_afi.get('monto', 0):,.2f} | `Valor Fijo (si aplica)` | Monto fijo para la moneda {moneda}. |")
+                lines.append(f"| IGV Total | {igv.get('porcentaje', 0):.2f}% | {igv.get('monto', 0):,.2f} | `(Intereses + Comisiones) * 18%` | IGV Int: `{calculos.get('igv_interes',0):.2f}`, IGV ComEst: `{calculos.get('igv_comision_estructuracion',0):.2f}`, IGV ComAfil: `{calculos.get('igv_afiliacion',0):.2f}` |")
+                lines.append("| | | | | |")
+                lines.append(f"| **Monto a Desembolsar** | **{abono.get('porcentaje', 0):.2f}%** | **{abono.get('monto', 0):,.2f}** | `Capital - Costos Totales` | `{capital:,.2f} - {costos_totales:,.2f}` |")
+                lines.append(f"| Margen de Seguridad | {margen.get('porcentaje', 0):.2f}% | {margen.get('monto', 0):,.2f} | `Monto Neto - Capital` | `{monto_neto:,.2f} - {capital:,.2f}` |")
+                lines.append("| | | | | |")
+                lines.append(f"| **Total (Monto Neto Factura)** | **100.00%** | **{monto_neto:,.2f}** | `Abono + Costos + Margen` | Verificación de suma de componentes. |")
+                
+                tabla_md = "\n".join(lines)
+                st.markdown(tabla_md, unsafe_allow_html=True)
 
         st.markdown("--- ") # Separador después del botón
-
-        # CSS para reducir el tamaño de la fuente de los labels en los resultados iterativos
-        st.markdown("""
-        <style>
-        label {
-            font-size: 0.1em !important; /* Reducido al mínimo para prueba */
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        if invoice.get('recalculate_result'):
-            st.write("##### Resultados del Cálculo")
-            recalc_result = invoice['recalculate_result']
-            desglose = recalc_result.get('desglose_final_detallado', {})
-            calculos = recalc_result.get('calculo_con_tasa_encontrada', {})
-            busqueda = recalc_result.get('resultado_busqueda', {})
-            moneda = invoice.get('moneda_factura', 'PEN')
-
-            # --- Preparar todos los datos necesarios ---
-            tasa_avance_pct = busqueda.get('tasa_avance_encontrada', 0) * 100
-            monto_neto = invoice.get('monto_neto_factura', 0)
-            capital = calculos.get('capital', 0)
-            
-            abono = desglose.get('abono', {})
-            interes = desglose.get('interes', {})
-            com_est = desglose.get('comision_estructuracion', {})
-            com_afi = desglose.get('comision_afiliacion', {})
-            igv = desglose.get('igv_total', {})
-            margen = desglose.get('margen_seguridad', {})
-
-            costos_totales = interes.get('monto', 0) + com_est.get('monto', 0) + com_afi.get('monto', 0) + igv.get('monto', 0)
-            tasa_diaria_pct = (invoice.get('interes_mensual', 0) / 30) 
-
-            # --- Construir la tabla en Markdown línea por línea para evitar errores de formato ---
-            lines = []
-            lines.append(f"| Item | % sobre Neto | Monto ({moneda}) | Fórmula de Cálculo | Detalle del Cálculo |")
-            lines.append("| :--- | :--- | :--- | :--- | :--- |")
-            lines.append(f"| Monto Neto de Factura | 100.00% | {monto_neto:,.2f} | `Dato de entrada` | Monto total de la factura sin IGV. |")
-            lines.append(f"| Tasa de Avance Aplicada | {tasa_avance_pct:.2f}% | N/A | `Tasa final de la operación` | N/A |")
-            lines.append(f"| Capital | {((capital / monto_neto) * 100) if monto_neto else 0:.2f}% | {capital:,.2f} | `Monto Neto * Tasa de Avance` | `{monto_neto:,.2f} * {tasa_avance_pct:.2f}%` |")
-            lines.append(f"| Intereses | {interes.get('porcentaje', 0):.2f}% | {interes.get('monto', 0):,.2f} | `Capital * ((1+TasaDiaria)^Plazo-1)` | Tasa Diaria: `{tasa_diaria_pct:.4f}%`, Plazo: `{calculos.get('plazo_operacion', 0)} días` |")
-            lines.append(f"| Comisión de Estructuración | {com_est.get('porcentaje', 0):.2f}% | {com_est.get('monto', 0):,.2f} | `MAX(Capital * %Comisión, Mínima)` | Base: `{capital * (invoice.get('comision_de_estructuracion',0)/100):.2f}`, Mín: `{invoice.get('comision_minima_pen',0) if moneda == 'PEN' else invoice.get('comision_minima_usd',0)}` |")
-            if com_afi.get('monto', 0) > 0:
-                lines.append(f"| Comisión de Afiliación | {com_afi.get('porcentaje', 0):.2f}% | {com_afi.get('monto', 0):,.2f} | `Valor Fijo (si aplica)` | Monto fijo para la moneda {moneda}. |")
-            lines.append(f"| IGV Total | {igv.get('porcentaje', 0):.2f}% | {igv.get('monto', 0):,.2f} | `(Intereses + Comisiones) * 18%` | IGV Int: `{calculos.get('igv_interes',0):.2f}`, IGV ComEst: `{calculos.get('igv_comision_estructuracion',0):.2f}`, IGV ComAfil: `{calculos.get('igv_afiliacion',0):.2f}` |")
-            lines.append("| | | | | |")
-            lines.append(f"| **Monto a Desembolsar** | **{abono.get('porcentaje', 0):.2f}%** | **{abono.get('monto', 0):,.2f}** | `Capital - Costos Totales` | `{capital:,.2f} - {costos_totales:,.2f}` |")
-            lines.append(f"| Margen de Seguridad | {margen.get('porcentaje', 0):.2f}% | {margen.get('monto', 0):,.2f} | `Monto Neto - Capital` | `{monto_neto:,.2f} - {capital:,.2f}` |")
-            lines.append("| | | | | |")
-            lines.append(f"| **Total (Monto Neto Factura)** | **100.00%** | **{monto_neto:,.2f}** | `Abono + Costos + Margen` | Verificación de suma de componentes. |")
-            
-            tabla_md = "\n".join(lines)
-            st.markdown(tabla_md, unsafe_allow_html=True)
 
 
 # --- UI: Consulta y Selección de Propuestas ---
