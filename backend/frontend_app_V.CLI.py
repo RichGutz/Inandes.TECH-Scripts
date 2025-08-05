@@ -60,6 +60,37 @@ def validate_inputs(invoice):
             is_valid = False
     return is_valid
 
+def propagate_commission_changes():
+    print("propagate_commission_changes called!")
+    if st.session_state.invoices_data:
+        # Get values from the first invoice (index 0)
+        first_invoice = st.session_state.invoices_data[0]
+        tasa_de_avance = first_invoice['tasa_de_avance']
+        interes_mensual = first_invoice['interes_mensual']
+        comision_de_estructuracion = first_invoice['comision_de_estructuracion']
+        comision_minima_pen = first_invoice['comision_minima_pen']
+        comision_minima_usd = first_invoice['comision_minima_usd']
+        comision_afiliacion_pen = first_invoice['comision_afiliacion_pen']
+        comision_afiliacion_usd = first_invoice['comision_afiliacion_usd']
+        aplicar_comision_afiliacion = first_invoice['aplicar_comision_afiliacion']
+
+        # Propagate to all other invoices (from index 1 onwards)
+        for i in range(1, len(st.session_state.invoices_data)):
+            current_invoice = st.session_state.invoices_data[i]
+            current_invoice['tasa_de_avance'] = tasa_de_avance
+            current_invoice['interes_mensual'] = interes_mensual
+            current_invoice['comision_de_estructuracion'] = comision_de_estructuracion
+            current_invoice['comision_minima_pen'] = comision_minima_pen
+            current_invoice['comision_minima_usd'] = comision_minima_usd
+            current_invoice['comision_afiliacion_pen'] = comision_afiliacion_pen
+            current_invoice['comision_afiliacion_usd'] = comision_afiliacion_usd
+            current_invoice['aplicar_comision_afiliacion'] = aplicar_comision_afiliacion
+
+        # Force a rerun to ensure UI updates immediately
+        st.rerun()
+
+# --- Inicialización del Session State ---
+
 # --- Inicialización del Session State ---
 if 'invoices_data' not in st.session_state: st.session_state.invoices_data = []
 if 'pdf_datos_cargados' not in st.session_state: st.session_state.pdf_datos_cargados = False
@@ -220,20 +251,20 @@ if st.session_state.invoices_data:
             st.write("") # Empty row for spacing
             col_tasa_avance, col_interes_mensual, col_comision_estructuracion, col_comision_min_pen, col_comision_min_usd, col_comision_afil_pen, col_comision_afil_usd = st.columns([0.8, 0.8, 1.4, 1, 1, 1, 1])
             with col_tasa_avance:
-                invoice['tasa_de_avance'] = st.number_input("Tasa de Avance (%)", min_value=0.0, value=invoice.get('tasa_de_avance', st.session_state.default_tasa_de_avance), format="%.2f", key=f"tasa_de_avance_{idx}", label_visibility="visible")
+                invoice['tasa_de_avance'] = st.number_input("Tasa de Avance (%)", min_value=0.0, value=invoice.get('tasa_de_avance', st.session_state.default_tasa_de_avance), format="%.2f", key=f"tasa_de_avance_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
             with col_interes_mensual:
-                invoice['interes_mensual'] = st.number_input("Interés Mensual (%)", min_value=0.0, value=invoice.get('interes_mensual', st.session_state.default_interes_mensual), format="%.2f", key=f"interes_mensual_{idx}", label_visibility="visible")
+                invoice['interes_mensual'] = st.number_input("Interés Mensual (%)", min_value=0.0, value=invoice.get('interes_mensual', st.session_state.default_interes_mensual), format="%.2f", key=f"interes_mensual_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
             with col_comision_estructuracion:
-                invoice['comision_de_estructuracion'] = st.number_input("Comisión de Estructuración (%)", min_value=0.0, value=invoice.get('comision_de_estructuracion', st.session_state.default_comision_de_estructuracion), format="%.2f", key=f"comision_de_estructuracion_{idx}", label_visibility="visible")
+                invoice['comision_de_estructuracion'] = st.number_input("Comisión de Estructuración (%)", min_value=0.0, value=invoice.get('comision_de_estructuracion', st.session_state.default_comision_de_estructuracion), format="%.2f", key=f"comision_de_estructuracion_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
             with col_comision_min_pen:
-                invoice['comision_minima_pen'] = st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=invoice.get('comision_minima_pen', st.session_state.default_comision_minima_pen), format="%.2f", key=f"comision_minima_pen_{idx}", label_visibility="visible")
+                invoice['comision_minima_pen'] = st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=invoice.get('comision_minima_pen', st.session_state.default_comision_minima_pen), format="%.2f", key=f"comision_minima_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
             with col_comision_min_usd:
-                invoice['comision_minima_usd'] = st.number_input("Comisión Mínima (USD)", min_value=0.0, value=invoice.get('comision_minima_usd', st.session_state.default_comision_minima_usd), format="%.2f", key=f"comision_minima_usd_{idx}", label_visibility="visible")
+                invoice['comision_minima_usd'] = st.number_input("Comisión Mínima (USD)", min_value=0.0, value=invoice.get('comision_minima_usd', st.session_state.default_comision_minima_usd), format="%.2f", key=f"comision_minima_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
             with col_comision_afil_pen:
-                invoice['comision_afiliacion_pen'] = st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=invoice.get('comision_afiliacion_pen', st.session_state.default_comision_afiliacion_pen), format="%.2f", key=f"comision_afiliacion_pen_{idx}", label_visibility="visible")
+                invoice['comision_afiliacion_pen'] = st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=invoice.get('comision_afiliacion_pen', st.session_state.default_comision_afiliacion_pen), format="%.2f", key=f"comision_afiliacion_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
             with col_comision_afil_usd:
-                invoice['comision_afiliacion_usd'] = st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=invoice.get('comision_afiliacion_usd', st.session_state.default_comision_afiliacion_usd), format="%.2f", key=f"comision_afiliacion_usd_{idx}", label_visibility="visible")
-        invoice['aplicar_comision_afiliacion'] = st.checkbox("Aplicar Comisión de Afiliación", value=invoice.get('aplicar_comision_afiliacion', False), key=f"aplicar_comision_afiliacion_{idx}")
+                invoice['comision_afiliacion_usd'] = st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=invoice.get('comision_afiliacion_usd', st.session_state.default_comision_afiliacion_usd), format="%.2f", key=f"comision_afiliacion_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes if idx == 0 else None)
+        invoice['aplicar_comision_afiliacion'] = st.checkbox("Aplicar Comisión de Afiliación", value=invoice.get('aplicar_comision_afiliacion', False), key=f"aplicar_comision_afiliacion_{idx}", on_change=propagate_commission_changes if idx == 0 else None)
 
         st.markdown("--- ")
 
