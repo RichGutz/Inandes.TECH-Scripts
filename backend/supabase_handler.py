@@ -48,6 +48,8 @@ FLATTENED_TO_SUPABASE_MAPPING = {
     'comision_afiliacion_usd': 'comision_afiliacion_usd',
     'aplicar_comision_afiliacion': 'aplicar_comision_afiliacion',
     'detraccion_porcentaje': 'detraccion_porcentaje',
+    'anexo_number': 'anexo_number',
+    'contract_number': 'contract_number',
 
     # Campos calculados (de initial_calc_result o recalculate_result)
     'fecha_pago_calculada': 'fecha_pago_calculada',
@@ -225,6 +227,8 @@ def get_proposal_details_by_id(proposal_id: str) -> dict:
                 'comision_afiliacion_monto_calculado': proposal_data.get('comision_afiliacion_monto_calculado'),
                 'igv_afiliacion_calculado': proposal_data.get('igv_afiliacion_calculado'),
                 'detraccion_porcentaje': round(proposal_data.get('detraccion_porcentaje', 0.0), 2),
+                'anexo_number': proposal_data.get('anexo_number', ''),
+                'contract_number': proposal_data.get('contract_number', ''),
             }
 
             # Formatear fechas de YYYY-MM-DD a DD-MM-YYYY

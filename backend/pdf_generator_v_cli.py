@@ -51,7 +51,7 @@ def generate_pdf(output_filepath, data):
     left_column_content.append(Spacer(1, 0.1 * inch))
 
     client_info_data = [
-        [Paragraph("<b>CONTRATO</b>", styles['SmallFont']), Paragraph(data.get('contract_name', 'INANDES FACTOR CAPITAL SAC'), styles['BlueSmallFont'])],
+        [Paragraph("<b>CONTRATO</b>", styles['SmallFont']), Paragraph(data.get('contract_number', 'INANDES FACTOR CAPITAL SAC'), styles['BlueSmallFont'])],
         [Paragraph("<b>CLIENTE</b>", styles['SmallFont']), Paragraph(data.get('emisor_nombre', 'MILENIO CONSULTORES SAC'), styles['BlueSmallFont'])],
         [Paragraph("<b>RUC</b>", styles['SmallFont']), Paragraph(data.get('emisor_ruc', '20422894854'), styles['BlueSmallFont'])],
         [Paragraph("<b>RELACION DE</b>", styles['SmallFont']), Paragraph(data.get('relation_type', 'FACTURA(S)'), styles['BlueSmallFont'])],
@@ -538,7 +538,7 @@ def generate_pdf(output_filepath, data):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Generate a PDF from factoring details.")
+    parser.add_argument("--contract_number", default='', help="Contract number")
     parser.add_argument("--output_filepath", required=True, help="The full path to save the output PDF.")
     # Add all other expected arguments
     parser.add_argument("--invoice_issuer_name", default='', help="Invoice issuer name")

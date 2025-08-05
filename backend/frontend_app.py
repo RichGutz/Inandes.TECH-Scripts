@@ -121,7 +121,6 @@ with st.expander("Cargar datos automáticamente desde PDF (Opcional)", expanded=
                         st.session_state.numero_factura = parsed_data.get('invoice_id', '')
                         st.session_state.pdf_datos_cargados = True
                         st.session_state.last_uploaded_pdf_id = uploaded_pdf_file.file_id
-                        st.session_state.parsed_pdf_name = uploaded_pdf_file.name # Store PDF name
 
                         if st.session_state.emisor_ruc:
                             st.session_state.emisor_nombre = supabase_handler.get_razon_social_by_ruc(st.session_state.emisor_ruc)
@@ -138,74 +137,42 @@ with st.expander("Cargar datos automáticamente desde PDF (Opcional)", expanded=
 
 # --- UI: Formulario Principal ---
 update_date_calculations()
-st.write(f"### Verifica Datos de la operación: {st.session_state.get('parsed_pdf_name', 'N/A')}")
-
-# Involucrados
-with st.container():
+st.write("### Ingresa los datos de la operación:")
+col1, col2, col3, col4 = st.columns([1.2, 1, 1, 1])
+with col1:
     st.write("##### Involucrados")
-    col_emisor_nombre, col_emisor_ruc, col_aceptante_nombre, col_aceptante_ruc = st.columns(4)
-    with col_emisor_nombre:
-        st.text_input("NOMBRE DEL EMISOR", key="emisor_nombre", label_visibility="collapsed")
-    with col_emisor_ruc:
-        st.text_input("RUC DEL EMISOR", key="emisor_ruc", label_visibility="collapsed")
-    with col_aceptante_nombre:
-        st.text_input("NOMBRE DEL ACEPTANTE", key="aceptante_nombre", label_visibility="collapsed")
-    with col_aceptante_ruc:
-        st.text_input("RUC DEL ACEPTANTE", key="aceptante_ruc", label_visibility="collapsed")
-
-# Montos y Moneda
-with st.container():
+    st.text_input("NOMBRE DEL EMISOR", key="emisor_nombre")
+    st.text_input("RUC DEL EMISOR", key="emisor_ruc")
+    st.text_input("NOMBRE DEL ACEPTANTE", key="aceptante_nombre")
+    st.text_input("RUC DEL ACEPTANTE", key="aceptante_ruc")
+with col2:
     st.write("##### Montos y Moneda")
-    col_num_factura, col_monto_total, col_monto_neto, col_moneda, col_detraccion = st.columns(5)
-    with col_num_factura:
-        st.text_input("NÚMERO DE FACTURA", key="numero_factura", label_visibility="collapsed")
-    with col_monto_total:
-        st.number_input("MONTO FACTURA TOTAL (CON IGV)", min_value=0.0, key="monto_total_factura", format="%.2f", label_visibility="collapsed")
-    with col_monto_neto:
-        st.number_input("MONTO FACTURA NETO", min_value=0.0, key="monto_neto_factura", format="%.2f", label_visibility="collapsed")
-    with col_moneda:
-        st.selectbox("MONEDA DE FACTURA", ["PEN", "USD"], key="moneda_factura", label_visibility="collapsed")
-    with col_detraccion:
-        detraccion_retencion_pct = 0.0
-        if st.session_state.monto_total_factura > 0:
-            detraccion_retencion_pct = ((st.session_state.monto_total_factura - st.session_state.monto_neto_factura) / st.session_state.monto_total_factura) * 100
-        st.session_state.detraccion_porcentaje = detraccion_retencion_pct
-        st.text_input("Detracción / Retención (%)", value=f"{detraccion_retencion_pct:.2f}%", disabled=True, label_visibility="collapsed")
-
-# Fechas y Plazos
-with st.container():
+    st.text_input("NÚMERO DE FACTURA", key="numero_factura")
+    st.number_input("MONTO FACTURA TOTAL (CON IGV)", min_value=0.0, key="monto_total_factura", format="%.2f")
+    st.number_input("MONTO FACTURA NETO", min_value=0.0, key="monto_neto_factura", format="%.2f")
+    st.selectbox("MONEDA DE FACTURA", ["PEN", "USD"], key="moneda_factura")
+    detraccion_retencion_pct = 0.0
+    if st.session_state.monto_total_factura > 0:
+        detraccion_retencion_pct = ((st.session_state.monto_total_factura - st.session_state.monto_neto_factura) / st.session_state.monto_total_factura) * 100
+    st.session_state.detraccion_porcentaje = detraccion_retencion_pct
+    st.text_input("Detracción / Retención (%)", value=f"{detraccion_retencion_pct:.2f}%", disabled=True)
+with col3:
     st.write("##### Fechas y Plazos")
-    col_fecha_emision, col_plazo_credito, col_fecha_pago, col_fecha_desembolso, col_plazo_operacion = st.columns(5)
-    with col_fecha_emision:
-        st.text_input("Fecha de Emisión (DD-MM-YYYY)", key='fecha_emision_factura', on_change=update_date_calculations, label_visibility="collapsed")
-    with col_plazo_credito:
-        st.number_input("Plazo de Crédito (días)", min_value=1, step=1, key='plazo_credito_dias', on_change=update_date_calculations, label_visibility="collapsed")
-    with col_fecha_pago:
-        st.text_input("Fecha de Pago (Calculada)", key='fecha_pago_calculada', disabled=True, label_visibility="collapsed")
-    with col_fecha_desembolso:
-        st.text_input("Fecha de Desembolso (DD-MM-YYYY)", key='fecha_desembolso_factoring', on_change=update_date_calculations, label_visibility="collapsed")
-    with col_plazo_operacion:
-        st.number_input("Plazo de Operación (días)", key='plazo_operacion_calculado', disabled=True, label_visibility="collapsed")
-
-# Tasas y Comisiones
-with st.container():
+    st.text_input("Fecha de Emisión (DD-MM-YYYY)", key='fecha_emision_factura', on_change=update_date_calculations)
+    st.number_input("Plazo de Crédito (días)", min_value=1, step=1, key='plazo_credito_dias', on_change=update_date_calculations)
+    st.text_input("Fecha de Pago (Calculada)", key='fecha_pago_calculada', disabled=True)
+    st.text_input("Fecha de Desembolso (DD-MM-YYYY)", key='fecha_desembolso_factoring', on_change=update_date_calculations)
+    st.number_input("Plazo de Operación (días)", key='plazo_operacion_calculado', disabled=True)
+with col4:
     st.write("##### Tasas y Comisiones")
-    col_tasa_avance, col_interes_mensual, col_comision_estructuracion, col_comision_min_pen, col_comision_min_usd, col_comision_afil_pen, col_comision_afil_usd = st.columns(7)
-    with col_tasa_avance:
-        st.number_input("Tasa de Avance (%)", min_value=0.0, value=98.0, format="%.2f", key="tasa_de_avance", label_visibility="collapsed")
-    with col_interes_mensual:
-        st.number_input("Interés Mensual (%)", min_value=0.0, value=1.25, format="%.2f", key="interes_mensual", label_visibility="collapsed")
-    with col_comision_estructuracion:
-        st.number_input("Comisión de Estructuración (%)", min_value=0.0, value=0.5, format="%.2f", key="comision_de_estructuracion", label_visibility="collapsed")
-    with col_comision_min_pen:
-        st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=10.0, format="%.2f", key="comision_minima_pen", label_visibility="collapsed")
-    with col_comision_min_usd:
-        st.number_input("Comisión Mínima (USD)", min_value=0.0, value=3.0, format="%.2f", key="comision_minima_usd", label_visibility="collapsed")
-    with col_comision_afil_pen:
-        st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=200.0, format="%.2f", key="comision_afiliacion_pen", label_visibility="collapsed")
-    with col_comision_afil_usd:
-        st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=50.0, format="%.2f", key="comision_afiliacion_usd", label_visibility="collapsed")
-st.checkbox("Aplicar Comisión de Afiliación", key="aplicar_comision_afiliacion")
+    st.number_input("Tasa de Avance (%)", min_value=0.0, value=98.0, format="%.2f", key="tasa_de_avance")
+    st.number_input("Interés Mensual (%)", min_value=0.0, value=1.25, format="%.2f", key="interes_mensual")
+    st.number_input("Comisión de Estructuración (%)", min_value=0.0, value=0.5, format="%.2f", key="comision_de_estructuracion")
+    st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=10.0, format="%.2f", key="comision_minima_pen")
+    st.number_input("Comisión Mínima (USD)", min_value=0.0, value=3.0, format="%.2f", key="comision_minima_usd")
+    st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=200.0, format="%.2f", key="comision_afiliacion_pen")
+    st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=50.0, format="%.2f", key="comision_afiliacion_usd")
+    st.checkbox("Aplicar Comisión de Afiliación", key="aplicar_comision_afiliacion")
 
 st.markdown("---")
 
@@ -236,62 +203,48 @@ with col_paso1:
                     response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
                     response.raise_for_status()
                     st.session_state.initial_calc_result = response.json()
-
-                    # Automatizar el Paso 2
-                    if st.session_state.initial_calc_result and 'abono_real_teorico' in st.session_state.initial_calc_result:
-                        abono_real_teorico = st.session_state.initial_calc_result['abono_real_teorico']
-                        monto_desembolsar_objetivo = (abono_real_teorico // 10) * 10 # Redondear a la decena inferior
-
-                        api_data_recalculate = {
-                            "plazo_operacion": st.session_state.plazo_operacion_calculado,
-                            "mfn": st.session_state.monto_neto_factura,
-                            "interes_mensual": st.session_state.interes_mensual / 100,
-                            "comision_estructuracion_pct": st.session_state.comision_de_estructuracion / 100,
-                            "moneda_factura": st.session_state.moneda_factura,
-                            "comision_min_pen": st.session_state.comision_minima_pen,
-                            "comision_min_usd": st.session_state.comision_minima_usd,
-                            "igv_pct": 0.18,
-                            "comision_afiliacion_valor": st.session_state.comision_afiliacion_pen,
-                            "comision_afiliacion_usd_valor": st.session_state.comision_afiliacion_usd,
-                            "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
-                            "monto_objetivo": monto_desembolsar_objetivo
-                        }
-                        with st.spinner('Buscando tasa de avance automáticamente...'):
-                            response_recalculate = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data_recalculate)
-                            response_recalculate.raise_for_status()
-                            st.session_state.recalculate_result = response_recalculate.json()
-                    else:
-                        st.session_state.recalculate_result = None
-
+                    st.session_state.recalculate_result = None
                 except requests.exceptions.RequestException as e:
                     st.error(f"Error de conexión con la API: {e}")
 
+    if st.session_state.initial_calc_result:
+        st.write("##### Resultado del Cálculo Inicial")
+        st.json(st.session_state.initial_calc_result)
+
+with col_paso2:
+    st.write("#### Paso 2: Encontrar Tasa de Avance")
+    with st.form("recalculate_form"):
+        monto_desembolsar_manual = st.number_input("Monto a Desembolsar Objetivo", min_value=0.0, format="%.2f")
+        submitted_recalculate = st.form_submit_button("Encontrar Tasa de Avance")
+        if submitted_recalculate and monto_desembolsar_manual > 0:
+            if validate_inputs():
+                api_data = {
+                    "plazo_operacion": st.session_state.plazo_operacion_calculado,
+                    "mfn": st.session_state.monto_neto_factura,
+                    "interes_mensual": st.session_state.interes_mensual / 100,
+                    "comision_estructuracion_pct": st.session_state.comision_de_estructuracion / 100,
+                    "moneda_factura": st.session_state.moneda_factura,
+                    "comision_min_pen": st.session_state.comision_minima_pen,
+                    "comision_min_usd": st.session_state.comision_minima_usd,
+                    "igv_pct": 0.18,
+                    "comision_afiliacion_valor": st.session_state.comision_afiliacion_pen,
+                    "comision_afiliacion_usd_valor": st.session_state.comision_afiliacion_usd,
+                    "aplicar_comision_afiliacion": st.session_state.aplicar_comision_afiliacion,
+                    "monto_objetivo": monto_desembolsar_manual
+                }
+                with st.spinner('Buscando tasa de avance...'):
+                    try:
+                        response = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data)
+                        response.raise_for_status()
+                        st.session_state.recalculate_result = response.json()
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Error de conexión con la API: {e}")
+        elif submitted_recalculate:
+            st.error("El Monto a Desembolsar Objetivo debe ser mayor a cero.")
+
     if st.session_state.recalculate_result:
-        st.write("##### Resultados del Cálculo Iterativo")
-        recalc_result = st.session_state.recalculate_result
-
-        # Define the order and labels for the results
-        results_data = [
-            ("Tasa de Avance Encontrada", recalc_result.get('resultado_busqueda', {}).get('tasa_avance_encontrada', 0.0) * 100, "%.2f"),
-            ("Abono Real Calculado", recalc_result.get('calculo_con_tasa_encontrada', {}).get('abono_real', 0.0), "%.2f"),
-            ("Capital", recalc_result.get('calculo_con_tasa_encontrada', {}).get('capital', 0.0), "%.2f"),
-            ("Interés", recalc_result.get('calculo_con_tasa_encontrada', {}).get('interes', 0.0), "%.2f"),
-            ("IGV Interés", recalc_result.get('calculo_con_tasa_encontrada', {}).get('igv_interes', 0.0), "%.2f"),
-            ("Comisión Estructuración", recalc_result.get('calculo_con_tasa_encontrada', {}).get('comision_estructuracion', 0.0), "%.2f"),
-            ("IGV Comisión Estructuración", recalc_result.get('calculo_con_tasa_encontrada', {}).get('igv_comision_estructuracion', 0.0), "%.2f"),
-            ("Comisión Afiliación", recalc_result.get('calculo_con_tasa_encontrada', {}).get('comision_afiliacion', 0.0), "%.2f"),
-            ("IGV Afiliación", recalc_result.get('calculo_con_tasa_encontrada', {}).get('igv_afiliacion', 0.0), "%.2f"),
-            ("Margen Seguridad", recalc_result.get('calculo_con_tasa_encontrada', {}).get('margen_seguridad', 0.0), "%.2f"),
-        ]
-
-        # Create 10 columns for the 10 results
-        cols_results = st.columns([1]*len(results_data))
-        for i, (label, value, format_str) in enumerate(results_data):
-            with cols_results[i]:
-                st.number_input(label, value=value, format=format_str, disabled=True, key=f"result_{label.replace(' ', '_').replace('%', '')}")
-
-# --- Pasos 3 y 4: Grabar e Imprimir ---
-st.markdown("---")
+        st.write("##### Resultado de la Búsqueda")
+        st.json(st.session_state.recalculate_result)
 
 # --- Pasos 3 y 4: Grabar e Imprimir ---
 st.markdown("---")

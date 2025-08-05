@@ -92,6 +92,8 @@ if 'invoices_data' not in st.session_state: st.session_state.invoices_data = []
 if 'pdf_datos_cargados' not in st.session_state: st.session_state.pdf_datos_cargados = False
 if 'last_uploaded_pdf_files_ids' not in st.session_state: st.session_state.last_uploaded_pdf_files_ids = []
 if 'last_saved_proposal_id' not in st.session_state: st.session_state.last_saved_proposal_id = ''
+if 'anexo_number' not in st.session_state: st.session_state.anexo_number = ''
+if 'contract_number' not in st.session_state: st.session_state.contract_number = ''
 if 'fijar_condiciones' not in st.session_state: st.session_state.fijar_condiciones = False
 # Default values for new invoices (these will be copied into each invoice's dict)
 if 'default_comision_afiliacion_pen' not in st.session_state: st.session_state.default_comision_afiliacion_pen = 200.0
@@ -344,9 +346,6 @@ if st.session_state.invoices_data:
             # The button is active only when all required fields are filled
             campos_requeridos_completos = validate_inputs(invoice)
 
-            if not campos_requeridos_completos:
-                st.info("Por favor, complete todos los campos obligatorios para habilitar el cálculo.")
-
             if st.button(f"Calcular", key=f"calc_initial_disbursement_{idx}", disabled=not campos_requeridos_completos):
                 if campos_requeridos_completos:
                     api_data = {
@@ -461,8 +460,75 @@ if st.session_state.invoices_data:
         st.markdown("--- ") # Separador después del botón
 
 
-# --- UI: Consulta y Selección de Propuestas ---
+# --- Pasos 3 y 4: Grabar e Imprimir ---
 st.markdown("--- ")
+st.write("#### Paso 3: Grabar Propuesta")
+
+# Input fields for Anexo and Contract Number
+with st.container():
+    st.write("##### Información Adicional para la Propuesta")
+    col_anexo, col_contrato = st.columns(2)
+    with col_anexo:
+        st.session_state.anexo_number = st.text_input("Número de Anexo", value=st.session_state.anexo_number, key="anexo_number_global")
+    with col_contrato:
+        st.session_state.contract_number = st.text_input("Número de Contrato", value=st.session_state.contract_number, key="contract_number_global")
+
+# Check if any invoice has a recalculate_result to enable the save button
+can_save_proposal = any(invoice.get('recalculate_result') for invoice in st.session_state.invoices_data)
+
+if st.button("GRABAR Propuesta en Base de Datos", disabled=not can_save_proposal):
+    if can_save_proposal:
+        for idx, invoice in enumerate(st.session_state.invoices_data):
+            if invoice.get('recalculate_result'):
+                with st.spinner(f"Guardando propuesta para Factura {idx + 1}..."):
+                    # Create a temporary session_data dictionary for the current invoice
+                    # This is a simplified approach; a more robust solution might involve
+                    # passing only the relevant invoice data to save_proposal
+                    # or modifying save_proposal to accept an invoice dict directly.
+                    # For now, we'll mimic the session_data structure for a single invoice.
+                    temp_session_data = {
+                        'emisor_nombre': invoice.get('emisor_nombre'),
+                        'emisor_ruc': invoice.get('emisor_ruc'),
+                        'aceptante_nombre': invoice.get('aceptante_nombre'),
+                        'aceptante_ruc': invoice.get('aceptante_ruc'),
+                        'numero_factura': invoice.get('numero_factura'),
+                        'monto_total_factura': invoice.get('monto_total_factura'),
+                        'monto_neto_factura': invoice.get('monto_neto_factura'),
+                        'moneda_factura': invoice.get('moneda_factura'),
+                        'fecha_emision_factura': invoice.get('fecha_emision_factura'),
+                        'plazo_credito_dias': invoice.get('plazo_credito_dias'),
+                        'fecha_desembolso_factoring': invoice.get('fecha_desembolso_factoring'),
+                        'tasa_de_avance': invoice.get('tasa_de_avance'),
+                        'interes_mensual': invoice.get('interes_mensual'),
+                        'comision_de_estructuracion': invoice.get('comision_de_estructuracion'),
+                        'comision_minima_pen': invoice.get('comision_minima_pen'),
+                        'comision_minima_usd': invoice.get('comision_minima_usd'),
+                        'comision_afiliacion_pen': invoice.get('comision_afiliacion_pen'),
+                        'comision_afiliacion_usd': invoice.get('comision_afiliacion_usd'),
+                        'aplicar_comision_afiliacion': invoice.get('aplicar_comision_afiliacion'),
+                        'detraccion_porcentaje': invoice.get('detraccion_porcentaje'),
+                        'fecha_pago_calculada': invoice.get('fecha_pago_calculada'),
+                        'plazo_operacion_calculado': invoice.get('plazo_operacion_calculado'),
+                        'initial_calc_result': invoice.get('initial_calc_result'),
+                        'recalculate_result': invoice.get('recalculate_result'),
+                        'anexo_number': st.session_state.anexo_number,
+                        'contract_number': st.session_state.contract_number,
+                    }
+                    success, message = supabase_handler.save_proposal(temp_session_data)
+                    if success:
+                        st.success(message)
+                        if "Propuesta con ID" in message:
+                            start_index = message.find("ID ") + 3
+                            end_index = message.find(" guardada")
+                            st.session_state.last_saved_proposal_id = message[start_index:end_index]
+                    else:
+                        st.error(message)
+    else:
+        st.warning("No hay resultados de cálculo para guardar.")
+
+st.markdown("--- ") # Divider between Paso 3 and Paso 4
+
+# --- UI: Consulta y Selección de Propuestas ---
 st.write("### Consulta y Selección de Propuestas")
 
 with st.expander("Buscar Propuestas para Consolidar", expanded=True):
