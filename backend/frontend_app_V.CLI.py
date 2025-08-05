@@ -40,7 +40,7 @@ def validate_inputs(invoice):
         "emisor_nombre": "Nombre del Emisor", "emisor_ruc": "RUC del Emisor",
         "aceptante_nombre": "Nombre del Aceptante", "aceptante_ruc": "RUC del Aceptante",
         "numero_factura": "Número de Factura", "moneda_factura": "Moneda de Factura",
-        "fecha_emision_factura": "Fecha de Emisión", "plazo_credito_dias": "Plazo de Crédito",
+        "fecha_emision_factura": "Fecha de Emisión",
         "fecha_desembolso_factoring": "Fecha de Desembolso", "tasa_de_avance": "Tasa de Avance",
         "interes_mensual": "Interés Mensual", "comision_de_estructuracion": "Comisión de Estructuración",
     }
