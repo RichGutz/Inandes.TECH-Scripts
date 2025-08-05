@@ -538,6 +538,7 @@ def generate_pdf(output_filepath, data):
 if __name__ == "__main__":
     import argparse
 
+    parser = argparse.ArgumentParser()
     parser.add_argument("--contract_number", default='', help="Contract number")
     parser.add_argument("--output_filepath", required=True, help="The full path to save the output PDF.")
     # Add all other expected arguments
