@@ -16,23 +16,54 @@ st.set_page_config(
 )
 
 # --- Funciones de Ayuda y Callbacks ---
-def update_date_calculations(invoice):
+def update_date_calculations(invoice, changed_field=None):
     try:
-        if invoice.get('fecha_emision_factura') and invoice.get('plazo_credito_dias', 0) > 0:
-            fecha_emision_dt = datetime.datetime.strptime(invoice['fecha_emision_factura'], "%d-%m-%Y")
-            fecha_pago_dt = fecha_emision_dt + datetime.timedelta(days=int(invoice['plazo_credito_dias']))
+        fecha_emision_str = invoice.get('fecha_emision_factura')
+        if not fecha_emision_str:
+            # If there's no emission date, we can't calculate anything.
+            invoice['fecha_pago_calculada'] = ""
+            invoice['plazo_credito_dias'] = 0
+            invoice['plazo_operacion_calculado'] = 0
+            return
+
+        fecha_emision_dt = datetime.datetime.strptime(fecha_emision_str, "%d-%m-%Y")
+
+        # --- Bidirectional Calculation ---
+        # If the credit term was the last thing changed by the user
+        if changed_field == 'plazo' and invoice.get('plazo_credito_dias', 0) > 0:
+            plazo = int(invoice['plazo_credito_dias'])
+            fecha_pago_dt = fecha_emision_dt + datetime.timedelta(days=plazo)
             invoice['fecha_pago_calculada'] = fecha_pago_dt.strftime("%d-%m-%Y")
+        # If the payment date was the last thing changed by the user
+        elif changed_field == 'fecha' and invoice.get('fecha_pago_calculada'):
+            fecha_pago_dt = datetime.datetime.strptime(invoice['fecha_pago_calculada'], "%d-%m-%Y")
+            if fecha_pago_dt > fecha_emision_dt:
+                invoice['plazo_credito_dias'] = (fecha_pago_dt - fecha_emision_dt).days
+            else:
+                # Avoid negative or zero credit terms if date is before emission
+                invoice['plazo_credito_dias'] = 0
+        # Default calculation if no specific field was changed (e.g., on initial load)
+        elif invoice.get('plazo_credito_dias', 0) > 0:
+             plazo = int(invoice['plazo_credito_dias'])
+             fecha_pago_dt = fecha_emision_dt + datetime.timedelta(days=plazo)
+             invoice['fecha_pago_calculada'] = fecha_pago_dt.strftime("%d-%m-%Y")
         else:
             invoice['fecha_pago_calculada'] = ""
+            # invoice['plazo_credito_dias'] is likely already 0 or None
 
+        # --- Plazo de Operación Calculation (remains the same) ---
         if invoice.get('fecha_pago_calculada') and invoice.get('fecha_desembolso_factoring'):
             fecha_pago_dt = datetime.datetime.strptime(invoice['fecha_pago_calculada'], "%d-%m-%Y")
             fecha_desembolso_dt = datetime.datetime.strptime(invoice['fecha_desembolso_factoring'], "%d-%m-%Y")
             invoice['plazo_operacion_calculado'] = (fecha_pago_dt - fecha_desembolso_dt).days if fecha_pago_dt >= fecha_desembolso_dt else 0
         else:
             invoice['plazo_operacion_calculado'] = 0
+
     except (ValueError, TypeError, AttributeError):
+        # Reset fields on any error to ensure a consistent state
         invoice['fecha_pago_calculada'] = ""
+        # Keep plazo_credito_dias as is, to avoid overwriting user input on a temporary error
+        # invoice['plazo_credito_dias'] = 0
         invoice['plazo_operacion_calculado'] = 0
 
 def validate_inputs(invoice):
@@ -270,34 +301,64 @@ if st.session_state.invoices_data:
                         # If the user clears the date, set it to an empty string
                         invoice['fecha_emision_factura'] = ''
 
+            # --- Callbacks for bidirectional updates ---
+            def plazo_changed(idx):
+                new_plazo = st.session_state.get(f"plazo_credito_dias_{idx}")
+                st.session_state.invoices_data[idx]['plazo_credito_dias'] = new_plazo
+                update_date_calculations(st.session_state.invoices_data[idx], changed_field='plazo')
+
+            def fecha_pago_changed(idx):
+                new_date_obj = st.session_state.get(f"fecha_pago_calculada_{idx}")
+                if new_date_obj:
+                    st.session_state.invoices_data[idx]['fecha_pago_calculada'] = new_date_obj.strftime('%d-%m-%Y')
+                else:
+                    st.session_state.invoices_data[idx]['fecha_pago_calculada'] = ''
+                update_date_calculations(st.session_state.invoices_data[idx], changed_field='fecha')
+
+            def fecha_desembolso_changed(idx):
+                new_date_obj = st.session_state.get(f"fecha_desembolso_factoring_{idx}")
+                if new_date_obj:
+                    st.session_state.invoices_data[idx]['fecha_desembolso_factoring'] = new_date_obj.strftime('%d-%m-%Y')
+                else:
+                    st.session_state.invoices_data[idx]['fecha_desembolso_factoring'] = ''
+                update_date_calculations(st.session_state.invoices_data[idx])
+
+                        
+
             with col_plazo_credito:
-                invoice['plazo_credito_dias'] = st.number_input(
+                plazo_value = invoice.get('plazo_credito_dias')
+                display_value = int(plazo_value) if plazo_value is not None else 0
+                st.number_input(
                     "Plazo de Crédito (días)",
-                    min_value=1,
+                    min_value=0,
                     step=1,
-                    value=invoice.get('plazo_credito_dias'), # No fallback default
-                    key=f"plazo_credito_dias_{idx}"
+                    value=display_value,
+                    key=f"plazo_credito_dias_{idx}",
+                    on_change=plazo_changed,
+                    args=(idx,)
+                )
+
+            with col_fecha_pago:
+                fecha_pago_obj = to_date_obj(invoice.get('fecha_pago_calculada'))
+                st.date_input(
+                    "Fecha de Pago",
+                    value=fecha_pago_obj,
+                    key=f"fecha_pago_calculada_{idx}",
+                    format="DD-MM-YYYY",
+                    on_change=fecha_pago_changed,
+                    args=(idx,)
                 )
 
             with col_fecha_desembolso:
                 fecha_desembolso_obj = to_date_obj(invoice.get('fecha_desembolso_factoring'))
-                nueva_fecha_desembolso_obj = st.date_input(
+                st.date_input(
                     "Fecha de Desembolso",
                     value=fecha_desembolso_obj,
                     key=f"fecha_desembolso_factoring_{idx}",
-                    format="DD-MM-YYYY"
+                    format="DD-MM-YYYY",
+                    on_change=fecha_desembolso_changed,
+                    args=(idx,)
                 )
-                if nueva_fecha_desembolso_obj:
-                    invoice['fecha_desembolso_factoring'] = nueva_fecha_desembolso_obj.strftime('%d-%m-%Y')
-                else:
-                    invoice['fecha_desembolso_factoring'] = ''
-
-            # --- Dynamic Calculation ---
-            # This function is called on every script rerun, ensuring calculations are always up-to-date
-            update_date_calculations(invoice)
-
-            with col_fecha_pago:
-                st.text_input("Fecha de Pago (Calculada)", value=invoice.get('fecha_pago_calculada', ''), disabled=True, key=f"fecha_pago_calculada_{idx}", label_visibility="visible")
 
             with col_plazo_operacion:
                 st.number_input("Plazo de Operación (días)", value=invoice.get('plazo_operacion_calculado', 0), disabled=True, key=f"plazo_operacion_calculado_{idx}", label_visibility="visible")
