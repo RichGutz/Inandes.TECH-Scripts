@@ -28,6 +28,7 @@ def generate_pdf(output_filepath, data):
     styles.add(ParagraphStyle(name='BoldSmallFontRight', parent=styles['BoldSmallFont'], alignment=TA_RIGHT))
     styles.add(ParagraphStyle(name='BoldSmallFontCenter', parent=styles['BoldSmallFont'], alignment=TA_CENTER))
     styles.add(ParagraphStyle(name='BoldExtraSmallFontCenter', parent=styles['BoldSmallFont'], alignment=TA_CENTER, fontSize=6, textColor=colors.blue))
+    styles.add(ParagraphStyle(name='BoldExtraExtraSmallFontCenter', parent=styles['BoldSmallFont'], alignment=TA_CENTER, fontSize=5, textColor=colors.blue))
     styles.add(ParagraphStyle(name='BoldNormalCenter', parent=styles['BoldNormal'], alignment=TA_CENTER))
     styles.add(ParagraphStyle(name='SmallFontCenter', parent=styles['SmallFont'], alignment=TA_CENTER))
     styles.add(ParagraphStyle(name='BlueSmallFont', fontSize=7, fontName='Helvetica', textColor=colors.blue))
@@ -323,7 +324,7 @@ def generate_pdf(output_filepath, data):
         # --- Four columns of tables at the bottom ---
         # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS
         intereses_pactados_data = [
-            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph(f"<b>FACTURAR A {data.get('emisor_nombre', 'MILENIO CONSULTORES SAC').upper()} POR INTERESES PACTADOS</b>", styles['BoldExtraExtraSmallFontCenter'])],
             [Paragraph("<b>INTERES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in invoices):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('igv_interes_calculado', 0) for inv in invoices):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in invoices) + sum(inv.get('igv_interes_calculado', 0) for inv in invoices):,.2f}", styles['BoldSmallFontRight'])],
@@ -343,7 +344,7 @@ def generate_pdf(output_filepath, data):
 
         # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN
         comision_estructuracion_data = [
-            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph(f"<b>FACTURAR A {data.get('emisor_nombre', 'MILENIO CONSULTORES SAC').upper()} POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraExtraSmallFontCenter'])],
             [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
@@ -363,7 +364,7 @@ def generate_pdf(output_filepath, data):
 
         # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE AFILIACION
         comision_afiliacion_data = [
-            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE AFILIACION</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph(f"<b>FACTURAR A {data.get('emisor_nombre', 'MILENIO CONSULTORES SAC').upper()} POR COMISION DE AFILIACION</b>", styles['BoldExtraExtraSmallFontCenter'])],
             [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_afiliacion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
@@ -383,7 +384,7 @@ def generate_pdf(output_filepath, data):
 
         # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES
         intereses_adicionales_data = [
-            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph(f"<b>FACTURAR A {data.get('emisor_nombre', 'MILENIO CONSULTORES SAC').upper()} POR INTERESES ADICIONALES</b>", styles['BoldExtraExtraSmallFontCenter'])],
             [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', 0.0):,.2f}", styles['BoldSmallFontRight'])],
@@ -419,7 +420,7 @@ def generate_pdf(output_filepath, data):
         # --- Three columns of tables at the bottom ---
         # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS
         intereses_pactados_data = [
-            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph(f"<b>FACTURAR A {data.get('emisor_nombre', 'MILENIO CONSULTORES SAC').upper()} POR INTERESES PACTADOS</b>", styles['BoldExtraExtraSmallFontCenter'])],
             [Paragraph("<b>INTERES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in invoices):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('igv_interes_calculado', 0) for inv in invoices):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in invoices) + sum(inv.get('igv_interes_calculado', 0) for inv in invoices):,.2f}", styles['BoldSmallFontRight'])],
@@ -439,7 +440,7 @@ def generate_pdf(output_filepath, data):
 
         # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN
         comision_estructuracion_data = [
-            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph(f"<b>FACTURAR A {data.get('emisor_nombre', 'MILENIO CONSULTORES SAC').upper()} POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraExtraSmallFontCenter'])],
             [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
@@ -459,7 +460,7 @@ def generate_pdf(output_filepath, data):
 
         # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES
         intereses_adicionales_data = [
-            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph(f"<b>FACTURAR A {data.get('emisor_nombre', 'MILENIO CONSULTORES SAC').upper()} POR INTERESES ADICIONALES</b>", styles['BoldExtraExtraSmallFontCenter'])],
             [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', 0.0):,.2f}", styles['BoldSmallFontRight'])],
             [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', 0.0):,.2f}", styles['BoldSmallFontRight'])],

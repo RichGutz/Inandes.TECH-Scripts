@@ -142,11 +142,13 @@ try:
 except FileNotFoundError:
     pass
 
-title_col, logo_col = st.columns([0.8, 0.2])
+geek_logo_col, title_col, inandes_logo_col = st.columns([0.2, 0.6, 0.2])
+with geek_logo_col:
+    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/logo.geek.png", width=100)
 with title_col:
-    st.write("## Modulo 1 - Factoring INANDES")
-with logo_col:
-    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", width=120, use_container_width=True)
+    st.markdown("<h2 style='text-align: center;'>Modulo 1 - Factoring INANDES</h2>", unsafe_allow_html=True)
+with inandes_logo_col:
+    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", use_container_width=True)
 
 # --- UI: Carga de Archivos ---
 with st.expander("", expanded=True):
