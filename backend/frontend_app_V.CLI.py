@@ -92,6 +92,54 @@ def validate_inputs(invoice):
             is_valid = False
     return is_valid
 
+def flatten_db_proposal(proposal):
+    """
+    Flattens the nested JSON from a database proposal to match the structure
+    of a session-calculated proposal for PDF generation.
+    """
+    recalc_result = proposal.get('recalculate_result', {})
+
+    # --- ROBUSTNESS FIX: Ensure recalc_result is a dictionary ---
+    if isinstance(recalc_result, str):
+        try:
+            recalc_result = json.loads(recalc_result)
+        except json.JSONDecodeError:
+            recalc_result = {}
+    # --- END FIX ---
+
+    desglose = recalc_result.get('desglose_final_detallado', {})
+    calculos = recalc_result.get('calculo_con_tasa_encontrada', {})
+    
+    # Add top-level keys that the PDF generator expects
+    proposal['advance_amount'] = calculos.get('capital', 0)
+    proposal['commission_amount'] = desglose.get('comision_estructuracion', {}).get('monto', 0)
+    proposal['interes_calculado'] = desglose.get('interes', {}).get('monto', 0)
+    proposal['igv_interes_calculado'] = calculos.get('igv_interes', 0)
+    proposal['initial_disbursement'] = desglose.get('abono', {}).get('monto', 0)
+    proposal['security_margin'] = desglose.get('margen_seguridad', {}).get('monto', 0)
+    
+    # Ensure other necessary keys are present, providing defaults if they are missing
+    proposal['invoice_issuer_name'] = proposal.get('invoice_issuer_name', 'N/A')
+    proposal['invoice_issuer_ruc'] = proposal.get('invoice_issuer_ruc', 'N/A')
+    proposal['invoice_acceptor_name'] = proposal.get('invoice_acceptor_name', 'N/A')
+    proposal['invoice_payer_name'] = proposal.get('invoice_payer_name', 'N/A')
+    proposal['invoice_acceptor_ruc'] = proposal.get('invoice_acceptor_ruc', 'N/A')
+    proposal['invoice_number'] = proposal.get('invoice_number', 'N/A')
+    proposal['invoice_series_and_number'] = proposal.get('invoice_series_and_number', 'N/A')
+    proposal['invoice_total_amount'] = proposal.get('invoice_total_amount', 0)
+    proposal['invoice_net_amount'] = proposal.get('invoice_net_amount', 0)
+    proposal['invoice_currency'] = proposal.get('invoice_currency', 'PEN')
+    proposal['invoice_issue_date'] = proposal.get('invoice_issue_date', 'N/A')
+    proposal['credit_term_days'] = proposal.get('credit_term_days', 0)
+    proposal['disbursement_date'] = proposal.get('disbursement_date', 'N/A')
+    proposal['calculated_payment_date'] = proposal.get('calculated_payment_date', 'N/A')
+    proposal['invoice_due_date'] = proposal.get('invoice_due_date', 'N/A')
+    proposal['calculated_operation_days'] = proposal.get('calculated_operation_days', 0)
+    proposal['financing_term_days'] = proposal.get('financing_term_days', 0)
+    proposal['detraccion_percentage'] = proposal.get('detraccion_percentage', 0)
+    
+    return proposal
+
 def propagate_commission_changes():
     # This function is called on_change. It will trigger a rerun.
     # On the next run, the UI will be updated based on the new state.
@@ -574,13 +622,29 @@ with col_paso3:
     st.session_state.anexo_number = st.text_input("Número de Anexo", value=st.session_state.anexo_number, key="anexo_number_global")
     st.session_state.contract_number = st.text_input("Número de Contrato", value=st.session_state.contract_number, key="contract_number_global")
 
-    can_save_proposal = any(invoice.get('recalculate_result') for invoice in st.session_state.invoices_data)
+    # --- Lógica de habilitación del botón ---
+    # 1. Debe haber al menos un resultado de recálculo en cualquiera de las facturas.
+    has_recalc_result = any(invoice.get('recalculate_result') for invoice in st.session_state.invoices_data)
+    
+    # 2. Los campos de anexo y contrato no deben estar vacíos.
+    contract_fields_filled = bool(st.session_state.anexo_number) and bool(st.session_state.contract_number)
+
+    # El botón está habilitado solo si ambas condiciones son verdaderas.
+    can_save_proposal = has_recalc_result and contract_fields_filled
 
     if st.button("GRABAR Propuesta en Base de Datos", disabled=not can_save_proposal):
         if can_save_proposal:
             for idx, invoice in enumerate(st.session_state.invoices_data):
                 if invoice.get('recalculate_result'):
                     with st.spinner(f"Guardando propuesta para Factura {idx + 1}..."):
+                        # Obtener los valores de los inputs
+                        anexo_number_str = st.session_state.anexo_number
+                        contract_number_str = st.session_state.contract_number
+
+                        # Convertir a entero o None si está vacío
+                        anexo_number_int = int(anexo_number_str) if anexo_number_str else None
+                        contract_number_int = int(contract_number_str) if contract_number_str else None
+                        
                         temp_session_data = {
                             'emisor_nombre': invoice.get('emisor_nombre'),
                             'emisor_ruc': invoice.get('emisor_ruc'),
@@ -606,8 +670,8 @@ with col_paso3:
                             'plazo_operacion_calculado': invoice.get('plazo_operacion_calculado'),
                             'initial_calc_result': invoice.get('initial_calc_result'),
                             'recalculate_result': invoice.get('recalculate_result'),
-                            'anexo_number': st.session_state.anexo_number,
-                            'contract_number': st.session_state.contract_number,
+                            'anexo_number': anexo_number_int,
+                            'contract_number': contract_number_int,
                         }
                         success, message = supabase_handler.save_proposal(temp_session_data)
                         if success:
@@ -773,7 +837,8 @@ with col_consulta:
                 proposal = supabase_handler.get_proposal_details_by_id(st.session_state.search_proposal_id)
                 if proposal and 'proposal_id' in proposal:
                     if not any(p['proposal_id'] == proposal['proposal_id'] for p in st.session_state.accumulated_proposals):
-                        st.session_state.accumulated_proposals.append(proposal)
+                        # Flatten the proposal before adding it to the list
+                        st.session_state.accumulated_proposals.append(flatten_db_proposal(proposal))
                         search_found = True
                 else:
                     st.info(f"No se encontró ninguna propuesta con el ID: {st.session_state.search_proposal_id}")
@@ -785,7 +850,8 @@ with col_consulta:
                         full_proposal_details = supabase_handler.get_proposal_details_by_id(proposal_partial['proposal_id'])
                         if full_proposal_details and 'proposal_id' in full_proposal_details:
                             if not any(p['proposal_id'] == full_proposal_details['proposal_id'] for p in st.session_state.accumulated_proposals):
-                                st.session_state.accumulated_proposals.append(full_proposal_details)
+                                # Flatten the proposal before adding it to the list
+                                st.session_state.accumulated_proposals.append(flatten_db_proposal(full_proposal_details))
                                 search_found = True
                 else:
                     st.info(f"No se encontraron propuestas activas para: {st.session_state.search_emisor_nombre}")
@@ -812,7 +878,7 @@ with col_consulta:
 
             col_check, col_id, col_emisor, col_monto = st.columns([0.1, 0.3, 0.3, 0.3])
             with col_check:
-                st.session_state.selected_proposals_checkboxes[checkbox_key] = st.checkbox("", value=st.session_state.selected_proposals_checkboxes[checkbox_key], key=checkbox_key)
+                st.session_state.selected_proposals_checkboxes[checkbox_key] = st.checkbox(" ", value=st.session_state.selected_proposals_checkboxes[checkbox_key], key=checkbox_key, label_visibility="collapsed")
             with col_id:
                 origen = "(Sesión Actual)" if proposal.get('is_session_proposal') else ""
                 st.write(f"**ID:** {proposal.get('proposal_id', 'N/A')} {origen}")
@@ -832,7 +898,8 @@ with col_consulta:
                     # Si es de Supabase, necesitamos obtener los detalles completos (ya se hace en la búsqueda).
                     selected_invoices_data.append(proposal)
             
-            # Construir el objeto de datos final con la estructura que espera el generador de PDF
+            if selected_invoices_data:
+                # Construir el objeto de datos final con la estructura que espera el generador de PDF
                 final_data_for_pdf = {
                     'tipo_documento': 'LIQUIDACIÓN DE FACTORING',
                     'contract_name': selected_invoices_data[0].get('contract_number', 'N/A'),
@@ -849,13 +916,18 @@ with col_consulta:
                     'total_interes_calculado': sum(inv.get('interes_calculado', 0) for inv in selected_invoices_data),
                     'total_igv_interes_calculado': sum(inv.get('igv_interes_calculado', 0) for inv in selected_invoices_data),
                     'total_abono_real_calculado': sum(inv.get('initial_disbursement', 0) for inv in selected_invoices_data),
-                    'total_margen_seguridad_calculado': sum(inv.get('security_margin', 0) for inv in selected_invoices_data),
+                    'total_margen_seguridad_calculado': sum(inv.get('margen_seguridad_calculado', 0) for inv in selected_invoices_data),
                     'total_comision_estructuracion_monto_calculado': sum(inv.get('commission_amount', 0) for inv in selected_invoices_data),
+                    'total_igv_comision_estructuracion_calculado': sum(inv.get('commission_amount', 0) for inv in selected_invoices_data) * 0.18,
+                    'total_comision_estructuracion': sum(inv.get('commission_amount', 0) for inv in selected_invoices_data) * 1.18,
                     'total_a_depositar': sum(inv.get('initial_disbursement', 0) for inv in selected_invoices_data) - sum(inv.get('commission_amount', 0) for inv in selected_invoices_data),
                     'imprimir_comision_afiliacion': any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data),
                     'total_comision_afiliacion_monto_calculado': selected_invoices_data[0].get('affiliation_commission_pen', 0) if selected_invoices_data else 0,
                     'total_igv_afiliacion_calculado': (selected_invoices_data[0].get('affiliation_commission_pen', 0) * 0.18) if any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data) else 0,
                     'total_comision_afiliacion': (selected_invoices_data[0].get('affiliation_commission_pen', 0) * 1.18) if any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data) else 0,
+                    'total_intereses_adicionales_int': 0.0,
+                    'total_intereses_adicionales_igv': 0.0,
+                    'total_intereses_adicionales': 0.0,
                     'signatures': []
                 }
 
@@ -871,6 +943,10 @@ with col_consulta:
                 with open(temp_json_path, 'w', encoding='utf-8') as f:
                     json.dump(final_data_for_pdf, f, ensure_ascii=False, indent=4)
 
+                print("--- [DEBUG] DATOS ENVIADOS DESDE FRONTEND --- ")
+                print(json.dumps(final_data_for_pdf, indent=4, ensure_ascii=False))
+                print("--------------------------------------------")
+
                 command = [
                     "python", "C:/Users/rguti/Inandes.TECH/backend/pdf_generator_v_cli.py",
                     f"--output_filepath={output_filepath}",
@@ -879,9 +955,20 @@ with col_consulta:
                 # ... (resto del código de generación de PDF sin cambios)
                 st.write("Generando PDF consolidado...")
                 try:
-                    result = subprocess.run(command, check=True, capture_output=True, text=True)
-                    if result.stderr: st.warning(f"Advertencias/Errores del generador de PDF: {result.stderr}")
-                    if os.path.exists(output_filepath):
+                    # Ejecutar el script y capturar la salida para depuración
+                    result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+
+                    # Imprimir siempre la salida estándar y el error estándar para depuración
+                    print("---[ Salida del Generador de PDF ]---")
+                    print(result.stdout)
+                    print("---[ Errores del Generador de PDF ]---")
+                    print(result.stderr)
+                    print("-------------------------------------")
+
+                    if result.returncode != 0 or not os.path.exists(output_filepath):
+                        st.error("Error: El archivo PDF consolidado no se generó correctamente. Revisa la consola para ver los detalles.")
+                        st.error(f"Detalle del error: {result.stderr}")
+                    else:
                         with open(output_filepath, "rb") as file:
                             st.download_button(
                                 label="Descargar PDF Consolidado", data=file.read(),
@@ -889,11 +976,10 @@ with col_consulta:
                             )
                         st.success("PDF consolidado generado. Haz clic en el botón para descargarlo.")
                         os.remove(output_filepath)
-                    else:
-                        st.error("Error: El archivo PDF consolidado no se generó correctamente.")
-                except subprocess.CalledProcessError as e:
-                    st.error(f"Error al generar PDF consolidado: {e}\nSalida del error: {e.stderr}")
+
                 except FileNotFoundError:
                     st.error("Error: El script pdf_generator_v_cli.py no fue encontrado.")
+                except Exception as e:
+                    st.error(f"Ocurrió un error inesperado: {e}")
             else:
                 st.warning("No hay propuestas seleccionadas para generar el PDF.")

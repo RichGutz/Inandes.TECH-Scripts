@@ -11,9 +11,15 @@ import datetime
 import random
 
 def generate_pdf(output_filepath, data):
+    print("--- [DEBUG] Inside generate_pdf function ---")
+    print(f"--- [DEBUG] Output filepath: {output_filepath} ---")
+    # print(f"--- [DEBUG] Received data: {json.dumps(data, indent=2)} ---") # Pretty print JSON
+    
     doc = SimpleDocTemplate(output_filepath, pagesize=letter, leftMargin=0.5*inch, rightMargin=0.5*inch, topMargin=0.375*inch, bottomMargin=0.375*inch)
     styles = getSampleStyleSheet()
     story = []
+    
+    print("--- [DEBUG] Doc and story initialized ---")
 
     # Custom styles
     styles.add(ParagraphStyle(name='RightAlign', alignment=TA_RIGHT))
@@ -50,11 +56,17 @@ def generate_pdf(output_filepath, data):
     left_column_content.append(Paragraph(f"<b>{main_title}</b>", styles['LeftAlign']))
     left_column_content.append(Spacer(1, 0.1 * inch))
 
+    # Ensure values are strings before passing to Paragraph
+    contract_name_str = str(data.get('contract_name', 'N/A'))
+    emisor_nombre_str = str(data.get('emisor_nombre', 'N/A'))
+    emisor_ruc_str = str(data.get('emisor_ruc', 'N/A'))
+    relation_type_str = str(data.get('relation_type', 'N/A'))
+
     client_info_data = [
-        [Paragraph("<b>CONTRATO</b>", styles['SmallFont']), Paragraph(data.get('contract_name', 'INANDES FACTOR CAPITAL SAC'), styles['BlueSmallFont'])],
-        [Paragraph("<b>CLIENTE</b>", styles['SmallFont']), Paragraph(data.get('emisor_nombre', 'MILENIO CONSULTORES SAC'), styles['BlueSmallFont'])],
-        [Paragraph("<b>RUC</b>", styles['SmallFont']), Paragraph(data.get('emisor_ruc', '20422894854'), styles['BlueSmallFont'])],
-        [Paragraph("<b>RELACION DE</b>", styles['SmallFont']), Paragraph(data.get('relation_type', 'FACTURA(S)'), styles['BlueSmallFont'])],
+        [Paragraph("<b>CONTRATO</b>", styles['SmallFont']), Paragraph(contract_name_str, styles['BlueSmallFont'])],
+        [Paragraph("<b>CLIENTE</b>", styles['SmallFont']), Paragraph(emisor_nombre_str, styles['BlueSmallFont'])],
+        [Paragraph("<b>RUC</b>", styles['SmallFont']), Paragraph(emisor_ruc_str, styles['BlueSmallFont'])],
+        [Paragraph("<b>RELACION DE</b>", styles['SmallFont']), Paragraph(relation_type_str, styles['BlueSmallFont'])],
     ]
     client_info_table = Table(client_info_data, colWidths=[0.8*inch, 5.2*inch])
     client_info_table.setStyle(TableStyle([
@@ -105,6 +117,8 @@ def generate_pdf(output_filepath, data):
     ]))
     story.append(anexo_date_table)
     story.append(Spacer(1, 0.1 * inch))
+
+    print("--- [DEBUG] Header and Anexo table added to story ---")
 
     # Table Headers
     table1_headers = [
@@ -187,6 +201,8 @@ def generate_pdf(output_filepath, data):
     ]))
     story.append(table1)
     story.append(Spacer(1, 0.1 * inch))
+
+    print("--- [DEBUG] First table (Facturas) added to story ---")
 
     # --- BASE DESCUENTO INTERES COBRADO Table ---
     table2_headers = [
@@ -314,6 +330,8 @@ def generate_pdf(output_filepath, data):
     story.append(table2)
     story.append(Spacer(1, 0.1 * inch))
 
+    print("--- [DEBUG] Second table (Descuento) added to story ---")
+
     
 
     
@@ -415,6 +433,7 @@ def generate_pdf(output_filepath, data):
         ]))
         bottom_tables.hAlign = 'LEFT'
         story.append(bottom_tables)
+        print("--- [DEBUG] Conditional bottom tables (4 columns) added to story ---")
     else:
         # --- Three columns of tables at the bottom ---
         # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS
@@ -491,6 +510,7 @@ def generate_pdf(output_filepath, data):
         ]))
         bottom_tables.hAlign = 'LEFT'
         story.append(bottom_tables)
+        print("--- [DEBUG] Conditional bottom tables (3 columns) added to story ---")
     story.append(Spacer(1, 0.1 * inch)) # Nueva fila adicional
     story.append(Spacer(1, 0.2 * inch))
 
@@ -531,7 +551,9 @@ def generate_pdf(output_filepath, data):
     ]))
     story.append(signatures_table)
 
+    print("--- [DEBUG] All tables added to story. About to build the document. ---")
     doc.build(story)
+    print("--- [DEBUG] doc.build(story) completed. ---")
 
     
 
@@ -549,14 +571,27 @@ if __name__ == "__main__":
     with open(args.json_filepath, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
+    print("--- [DEBUG] DATOS RECIBIDOS POR PDF_GENERATOR ---")
+    print(json.dumps(data, indent=4, ensure_ascii=False))
+    print("-------------------------------------------------")
+
     output_dir = os.path.dirname(args.output_filepath)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"Created output directory: {output_dir}")
 
+    # Log the received data for debugging
+    log_file_path = os.path.join(output_dir, 'pdf_generator_log.json')
+    with open(log_file_path, 'w', encoding='utf-8') as log_f:
+        json.dump(data, log_f, ensure_ascii=False, indent=4)
+    print(f"Data for PDF generation logged to {log_file_path}")
+
     try:
+        print("Starting PDF generation...")
         generate_pdf(args.output_filepath, data)
         print(f"PDF generated successfully at: {args.output_filepath}")
     except Exception as e:
         print(f"Error generating PDF: {e}")
+    finally:
+        print("pdf_generator_v_cli.py script finished.")
 
