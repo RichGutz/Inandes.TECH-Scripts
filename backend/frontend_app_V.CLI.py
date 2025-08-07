@@ -142,13 +142,26 @@ try:
 except FileNotFoundError:
     pass
 
-geek_logo_col, title_col, inandes_logo_col = st.columns([0.2, 0.6, 0.2])
-with geek_logo_col:
-    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/logo.geek.png", width=100)
-with title_col:
-    st.markdown("<h2 style='text-align: center;'>Modulo 1 - Factoring INANDES</h2>", unsafe_allow_html=True)
-with inandes_logo_col:
-    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", use_container_width=True)
+# Inject CSS for vertical alignment and right alignment for the last column
+st.markdown("""
+<style>
+[data-testid="stHorizontalBlock"] {
+    align-items: center; /* Aligns items vertically in the center */
+}
+/* Target the image within the third column specifically for right alignment */
+[data-testid="stHorizontalBlock"] > div:nth-child(3) img {
+    margin-left: auto; /* Pushes the image to the right */
+}
+</style>
+""", unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([0.25, 0.5, 0.25])
+with col1:
+    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/logo.geek.png", width=200)
+with col2:
+    st.markdown("<h2 style='text-align: center; font-size: 2.4em;'>Modulo Operaciones de Factoring</h2>", unsafe_allow_html=True)
+with col3:
+    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", width=150)
 
 # --- UI: Carga de Archivos ---
 with st.expander("", expanded=True):
@@ -547,7 +560,7 @@ if st.session_state.invoices_data:
 
 # --- Pasos 3 y 4: Grabar e Imprimir ---
 st.markdown("---")
-st.write("#### Paso 3 y Consulta")
+
 
 # Creación de la estructura de dos columnas
 col_paso3, col_consulta = st.columns(2)
