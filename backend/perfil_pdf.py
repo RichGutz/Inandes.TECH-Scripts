@@ -4,10 +4,11 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.pdfgen import canvas
 import os
 import datetime
 
-def generate_perfil_pdf(output_filepath, invoice_data):
+def generate_perfil_pdf(output_filepath, invoice_data, print_date_str):
     doc = SimpleDocTemplate(output_filepath, pagesize=letter, leftMargin=0.5*inch, rightMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
     styles = getSampleStyleSheet()
     story = []
@@ -29,6 +30,13 @@ def generate_perfil_pdf(output_filepath, invoice_data):
     styles.add(ParagraphStyle(name='TinyFont', fontSize=5))
     styles.add(ParagraphStyle(name='SmallTinyFont', fontSize=5, leading=5))
     styles.add(ParagraphStyle(name='BoldExtraExtraSmallFontCenter', parent=styles['BoldSmallFont'], alignment=TA_CENTER, fontSize=5, textColor=colors.blue))
+
+    # Footer callback function
+    def footer_callback(canvas_obj, doc_obj):
+        canvas_obj.saveState()
+        canvas_obj.setFont('Helvetica', 8)
+        canvas_obj.drawString(inch, 0.75 * inch, f"Fecha de Impresión: {print_date_str}")
+        canvas_obj.restoreState()
 
     # Title
     story.append(Paragraph("Perfil de la Operación", styles['h2']))
@@ -113,7 +121,7 @@ def generate_perfil_pdf(output_filepath, invoice_data):
     ]))
     story.append(table)
 
-    doc.build(story)
+    doc.build(story, onFirstPage=footer_callback, onLaterPages=footer_callback)
 
 if __name__ == "__main__":
     import argparse
@@ -122,16 +130,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_filepath", required=True, help="The full path to save the output PDF.")
     parser.add_argument("--invoice_json", required=True, help="JSON string of a single invoice's data.")
+    parser.add_argument("--print_date", required=True, help="Date of printing in string format.")
     args = parser.parse_args()
 
     invoice_data = json.loads(args.invoice_json)
+    print_date_str = args.print_date
 
     output_dir = os.path.dirname(args.output_filepath)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     try:
-        generate_perfil_pdf(args.output_filepath, invoice_data)
+        generate_perfil_pdf(args.output_filepath, invoice_data, print_date_str)
         print(f"PDF de perfil generado exitosamente en: {args.output_filepath}")
     except Exception as e:
         print(f"Error al generar PDF de perfil: {e}")

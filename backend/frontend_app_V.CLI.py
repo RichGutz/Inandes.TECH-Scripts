@@ -4,6 +4,8 @@ import os
 import pdf_parser
 import datetime
 import supabase_handler
+import json
+import subprocess
 
 # --- Configuración Inicial ---
 API_BASE_URL = "http://127.0.0.1:8000"
@@ -559,14 +561,14 @@ if st.session_state.invoices_data:
 
 
 # --- Pasos 3 y 4: Grabar e Imprimir ---
-st.markdown("---")
 
 
 # Creación de la estructura de dos columnas
 col_paso3, col_consulta = st.columns(2)
 
 with col_paso3:
-    st.write("##### Paso 3: Grabar Propuesta")
+    st.write("#### Grabar Propuesta")
+    st.write("##### 1. Ingresar Datos de Contrato")
 
     # Inputs apilados verticalmente como se solicitó
     st.session_state.anexo_number = st.text_input("Número de Anexo", value=st.session_state.anexo_number, key="anexo_number_global")
@@ -631,11 +633,62 @@ with col_paso3:
         else:
             st.warning("No hay resultados de cálculo para guardar.")
 
+    # New button for printing individual profiles
+    can_print_profiles = any(invoice.get('recalculate_result') for invoice in st.session_state.invoices_data)
+    if st.button("Imprimir Perfiles", disabled=not can_print_profiles):
+        if can_print_profiles:
+            st.write("Generando PDFs de perfiles individuales...")
+            generated_pdf_paths = []
+            for idx, invoice in enumerate(st.session_state.invoices_data):
+                if invoice.get('recalculate_result'):
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    output_filename = f"perfil_factura_{invoice.get('numero_factura', idx+1)}_{timestamp}.pdf"
+                    output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", output_filename)
+
+                    invoice_json = json.dumps(invoice)
+                    print_date = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+
+                    command = [
+                        "python", "C:/Users/rguti/Inandes.TECH/backend/perfil_pdf.py",
+                        f"--output_filepath={output_filepath}",
+                        f"--invoice_json={invoice_json}",
+                        f"--print_date={print_date}"
+                    ]
+                    try:
+                        result = subprocess.run(command, check=True, capture_output=True, text=True)
+                        if result.stderr:
+                            st.warning(f"Advertencias/Errores del generador de perfil PDF para {invoice.get('numero_factura', '')}: {result.stderr}")
+                        if os.path.exists(output_filepath):
+                            generated_pdf_paths.append(output_filepath)
+                            st.success(f"Perfil PDF para Factura {invoice.get('numero_factura', '')} generado.")
+                        else:
+                            st.error(f"Error: El perfil PDF para Factura {invoice.get('numero_factura', '')} no se generó correctamente.")
+                    except subprocess.CalledProcessError as e:
+                        st.error(f"Error al generar perfil PDF para Factura {invoice.get('numero_factura', '')}: {e}\nSalida del error: {e.stderr}")
+                    except FileNotFoundError:
+                        st.error("Error: El script perfil_pdf.py no fue encontrado.")
+            
+            if generated_pdf_paths:
+                st.success("Todos los perfiles PDF generados. Puedes descargarlos a continuación:")
+                for pdf_path in generated_pdf_paths:
+                    with open(pdf_path, "rb") as file:
+                        st.download_button(
+                            label=f"Descargar {os.path.basename(pdf_path)}",
+                            data=file.read(),
+                            file_name=os.path.basename(pdf_path),
+                            mime="application/pdf"
+                        )
+                    os.remove(pdf_path)
+            else:
+                st.warning("No se generaron perfiles PDF. Asegúrate de que haya facturas calculadas.")
+        else:
+            st.warning("No hay resultados de cálculo para generar perfiles PDF.")
+
 with col_consulta:
-    st.write("##### Consulta y Generación de PDF")
+    st.write("#### Consulta y Generación de PDF")
 
     # --- Funcionalidad 1: Añadir propuesta actual ---
-    st.write("###### 1. Añadir Propuesta(s) en Pantalla")
+    st.write("##### 1. Añadir Propuesta(s) en Pantalla")
     if st.button("Añadir a la Lista de Impresión", help="Agrega las propuestas calculadas en esta sesión a la lista de abajo para generar el PDF."):
         if 'accumulated_proposals' not in st.session_state:
             st.session_state.accumulated_proposals = []
