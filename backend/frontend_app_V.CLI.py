@@ -708,14 +708,21 @@ with col_consulta:
                         'invoice_issuer_name': invoice.get('emisor_nombre'),
                         'invoice_issuer_ruc': invoice.get('emisor_ruc'),
                         'invoice_acceptor_name': invoice.get('aceptante_nombre'),
+                        'invoice_payer_name': invoice.get('aceptante_nombre'), # Align key for PDF generator
                         'invoice_acceptor_ruc': invoice.get('aceptante_ruc'),
                         'invoice_number': invoice.get('numero_factura'),
+                        'invoice_series_and_number': invoice.get('numero_factura'), # Align key for PDF generator
                         'invoice_total_amount': invoice.get('monto_total_factura'),
                         'invoice_net_amount': invoice.get('monto_neto_factura'),
                         'invoice_currency': invoice.get('moneda_factura'),
                         'invoice_issue_date': invoice.get('fecha_emision_factura'),
                         'credit_term_days': invoice.get('plazo_credito_dias'),
                         'disbursement_date': invoice.get('fecha_desembolso_factoring'),
+                        'calculated_payment_date': invoice.get('fecha_pago_calculada'),
+                        'invoice_due_date': invoice.get('fecha_pago_calculada'), # Align key for PDF generator
+                        'calculated_operation_days': invoice.get('plazo_operacion_calculado'),
+                        'financing_term_days': invoice.get('plazo_operacion_calculado'), # Align key for PDF generator
+                        'detraccion_percentage': invoice.get('detraccion_porcentaje'),
                         'advance_rate': invoice.get('recalculate_result', {}).get('resultado_busqueda', {}).get('tasa_avance_encontrada', 0) * 100,
                         'monthly_interest_rate': invoice.get('interes_mensual'),
                         'structuring_commission_rate': invoice.get('comision_de_estructuracion'),
@@ -724,16 +731,19 @@ with col_consulta:
                         'affiliation_commission_pen': invoice.get('comision_afiliacion_pen'),
                         'affiliation_commission_usd': invoice.get('comision_afiliacion_usd'),
                         'apply_affiliation_commission': invoice.get('aplicar_comision_afiliacion'),
-                        'detraccion_percentage': invoice.get('detraccion_porcentaje'),
-                        'calculated_payment_date': invoice.get('fecha_pago_calculada'),
-                        'calculated_operation_days': invoice.get('plazo_operacion_calculado'),
                         'initial_disbursement': invoice.get('recalculate_result', {}).get('desglose_final_detallado', {}).get('abono', {}).get('monto', 0),
                         'total_costs': invoice.get('recalculate_result', {}).get('calculo_con_tasa_encontrada', {}).get('costos_totales', 0),
                         'security_margin': invoice.get('recalculate_result', {}).get('desglose_final_detallado', {}).get('margen_seguridad', {}).get('monto', 0),
+                        'margen_seguridad_calculado': invoice.get('recalculate_result', {}).get('desglose_final_detallado', {}).get('margen_seguridad', {}).get('monto', 0),
                         'anexo_number': st.session_state.anexo_number,
                         'contract_number': st.session_state.contract_number,
-                        'calculation_details': invoice.get('recalculate_result'), # Guardar todos los detalles
-                        'is_session_proposal': True # Flag para identificarla en la UI
+                        'calculation_details': invoice.get('recalculate_result'),
+                        'is_session_proposal': True,
+                        # --- Flattened keys for pdf_generator_v_cli ---
+                        'advance_amount': invoice.get('recalculate_result', {}).get('calculo_con_tasa_encontrada', {}).get('capital', 0),
+                        'commission_amount': invoice.get('recalculate_result', {}).get('desglose_final_detallado', {}).get('comision_estructuracion', {}).get('monto', 0),
+                        'interes_calculado': invoice.get('recalculate_result', {}).get('desglose_final_detallado', {}).get('interes', {}).get('monto', 0),
+                        'igv_interes_calculado': invoice.get('recalculate_result', {}).get('calculo_con_tasa_encontrada', {}).get('igv_interes', 0),
                     }
                     st.session_state.accumulated_proposals.append(proposal_data)
                     proposals_added += 1
@@ -822,14 +832,49 @@ with col_consulta:
                     # Si es de Supabase, necesitamos obtener los detalles completos (ya se hace en la búsqueda).
                     selected_invoices_data.append(proposal)
             
-            if selected_invoices_data:
-                import subprocess, json, time
+            # Construir el objeto de datos final con la estructura que espera el generador de PDF
+                final_data_for_pdf = {
+                    'tipo_documento': 'LIQUIDACIÓN DE FACTORING',
+                    'contract_name': selected_invoices_data[0].get('contract_number', 'N/A'),
+                    'emisor_nombre': selected_invoices_data[0].get('invoice_issuer_name', 'N/A'),
+                    'emisor_ruc': selected_invoices_data[0].get('invoice_issuer_ruc', 'N/A'),
+                    'relation_type': 'FACTURA(S)',
+                    'anexo_number': selected_invoices_data[0].get('anexo_number', 'N/A'),
+                    'document_date': datetime.datetime.now().strftime("%A %d, %B, %Y").upper(),
+                    'facturas': selected_invoices_data,
+                    'total_monto_neto': sum(inv.get('invoice_net_amount', 0) for inv in selected_invoices_data),
+                    'detracciones_total': sum(inv.get('invoice_total_amount', 0) * (inv.get('detraccion_percentage', 0) / 100) for inv in selected_invoices_data),
+                    'total_neto': sum(inv.get('invoice_net_amount', 0) for inv in selected_invoices_data) - sum(inv.get('invoice_total_amount', 0) * (inv.get('detraccion_percentage', 0) / 100) for inv in selected_invoices_data),
+                    'total_capital_calculado': sum(inv.get('advance_amount', 0) for inv in selected_invoices_data),
+                    'total_interes_calculado': sum(inv.get('interes_calculado', 0) for inv in selected_invoices_data),
+                    'total_igv_interes_calculado': sum(inv.get('igv_interes_calculado', 0) for inv in selected_invoices_data),
+                    'total_abono_real_calculado': sum(inv.get('initial_disbursement', 0) for inv in selected_invoices_data),
+                    'total_margen_seguridad_calculado': sum(inv.get('security_margin', 0) for inv in selected_invoices_data),
+                    'total_comision_estructuracion_monto_calculado': sum(inv.get('commission_amount', 0) for inv in selected_invoices_data),
+                    'total_a_depositar': sum(inv.get('initial_disbursement', 0) for inv in selected_invoices_data) - sum(inv.get('commission_amount', 0) for inv in selected_invoices_data),
+                    'imprimir_comision_afiliacion': any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data),
+                    'total_comision_afiliacion_monto_calculado': selected_invoices_data[0].get('affiliation_commission_pen', 0) if selected_invoices_data else 0,
+                    'total_igv_afiliacion_calculado': (selected_invoices_data[0].get('affiliation_commission_pen', 0) * 0.18) if any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data) else 0,
+                    'total_comision_afiliacion': (selected_invoices_data[0].get('affiliation_commission_pen', 0) * 1.18) if any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data) else 0,
+                    'signatures': []
+                }
+
+                import subprocess, json, tempfile
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 output_filepath = f"C:/Users/rguti/Inandes.TECH/generated_pdfs/consolidated_invoice_{timestamp}.pdf"
-                invoices_json = json.dumps(selected_invoices_data)
+
+                temp_dir = "C:/Users/rguti/Inandes.TECH/backend/temp_files"
+                if not os.path.exists(temp_dir):
+                    os.makedirs(temp_dir)
+                
+                temp_json_path = os.path.join(temp_dir, f"consolidated_data_{timestamp}.json")
+                with open(temp_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(final_data_for_pdf, f, ensure_ascii=False, indent=4)
+
                 command = [
                     "python", "C:/Users/rguti/Inandes.TECH/backend/pdf_generator_v_cli.py",
-                    f"--output_filepath={output_filepath}", f"--invoices_json={invoices_json}"
+                    f"--output_filepath={output_filepath}",
+                    f"--json_filepath={temp_json_path}"
                 ]
                 # ... (resto del código de generación de PDF sin cambios)
                 st.write("Generando PDF consolidado...")

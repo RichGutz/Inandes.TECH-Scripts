@@ -1,854 +1,562 @@
-import streamlit as st
-import requests
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.pdfgen import canvas
+from reportlab.platypus import PageBreak
 import os
-import pdf_parser
 import datetime
-import supabase_handler
-import json
-import subprocess
+import random
 
-# --- Configuración Inicial ---
-API_BASE_URL = "http://127.0.0.1:8000"
+def generate_pdf(output_filepath, data):
+    doc = SimpleDocTemplate(output_filepath, pagesize=letter, leftMargin=0.5*inch, rightMargin=0.5*inch, topMargin=0.375*inch, bottomMargin=0.375*inch)
+    styles = getSampleStyleSheet()
+    story = []
 
-st.set_page_config(
-    layout="wide",
-    initial_sidebar_state="expanded",
-    page_title="Calculadora de Factoring INANDES",
-    page_icon="📊",
-)
+    # Custom styles
+    styles.add(ParagraphStyle(name='RightAlign', alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name='CenterAlign', alignment=TA_CENTER))
+    styles.add(ParagraphStyle(name='LeftAlign', alignment=TA_LEFT))
+    styles.add(ParagraphStyle(name='SmallFont', fontSize=7))
+    styles.add(ParagraphStyle(name='BoldSmallFont', fontSize=6, fontName='Helvetica-Bold'))
+    styles.add(ParagraphStyle(name='BoldNormal', fontName='Helvetica-Bold'))
 
-# --- Funciones de Ayuda y Callbacks ---
-def update_date_calculations(invoice, changed_field=None):
-    try:
-        fecha_emision_str = invoice.get('fecha_emision_factura')
-        if not fecha_emision_str:
-            # If there's no emission date, we can't calculate anything.
-            invoice['fecha_pago_calculada'] = ""
-            invoice['plazo_credito_dias'] = 0
-            invoice['plazo_operacion_calculado'] = 0
-            return
+    # New styles for alignment with bold fonts
+    styles.add(ParagraphStyle(name='BoldNormalRight', parent=styles['BoldNormal'], alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name='BoldSmallFontRight', parent=styles['BoldSmallFont'], alignment=TA_RIGHT))
+    styles.add(ParagraphStyle(name='BoldSmallFontCenter', parent=styles['BoldSmallFont'], alignment=TA_CENTER))
+    styles.add(ParagraphStyle(name='BoldExtraSmallFontCenter', parent=styles['BoldSmallFont'], alignment=TA_CENTER, fontSize=6, textColor=colors.blue))
+    styles.add(ParagraphStyle(name='BoldNormalCenter', parent=styles['BoldNormal'], alignment=TA_CENTER))
+    styles.add(ParagraphStyle(name='SmallFontCenter', parent=styles['SmallFont'], alignment=TA_CENTER))
+    styles.add(ParagraphStyle(name='BlueSmallFont', fontSize=7, fontName='Helvetica', textColor=colors.blue))
+    styles.add(ParagraphStyle(name='TinyFont', fontSize=5))
+    styles.add(ParagraphStyle(name='SmallTinyFont', fontSize=5, leading=5))
+    logo_path = "C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png"
+    inandes_logo = None
+    if os.path.exists(logo_path):
+        inandes_logo = Image(logo_path, width=1.5*inch, height=0.5*inch)
+    else:
+        print(f"Warning: Logo not found at {logo_path}. Using placeholder text.")
+        inandes_logo = Paragraph("INANDES Logo Placeholder", styles['RightAlign'])
 
-        fecha_emision_dt = datetime.datetime.strptime(fecha_emision_str, "%d-%m-%Y")
+    # Left column content (Main Title + Client Info)
+    left_column_content = []
+    document_type = data.get('tipo_documento', '')
+    main_title = "FONDO NSG MIPYME - INANDES FACTOR CAPITAL S.A.C."
+    if document_type:
+        main_title = f"{document_type.upper()} - {main_title}"
+    left_column_content.append(Paragraph(f"<b>{main_title}</b>", styles['LeftAlign']))
+    left_column_content.append(Spacer(1, 0.1 * inch))
 
-        # --- Bidirectional Calculation ---
-        # If the credit term was the last thing changed by the user
-        if changed_field == 'plazo' and invoice.get('plazo_credito_dias', 0) > 0:
-            plazo = int(invoice['plazo_credito_dias'])
-            fecha_pago_dt = fecha_emision_dt + datetime.timedelta(days=plazo)
-            invoice['fecha_pago_calculada'] = fecha_pago_dt.strftime("%d-%m-%Y")
-        # If the payment date was the last thing changed by the user
-        elif changed_field == 'fecha' and invoice.get('fecha_pago_calculada'):
-            fecha_pago_dt = datetime.datetime.strptime(invoice['fecha_pago_calculada'], "%d-%m-%Y")
-            if fecha_pago_dt > fecha_emision_dt:
-                invoice['plazo_credito_dias'] = (fecha_pago_dt - fecha_emision_dt).days
-            else:
-                # Avoid negative or zero credit terms if date is before emission
-                invoice['plazo_credito_dias'] = 0
-        # Default calculation if no specific field was changed (e.g., on initial load)
-        elif invoice.get('plazo_credito_dias', 0) > 0:
-             plazo = int(invoice['plazo_credito_dias'])
-             fecha_pago_dt = fecha_emision_dt + datetime.timedelta(days=plazo)
-             invoice['fecha_pago_calculada'] = fecha_pago_dt.strftime("%d-%m-%Y")
-        else:
-            invoice['fecha_pago_calculada'] = ""
-            # invoice['plazo_credito_dias'] is likely already 0 or None
+    client_info_data = [
+        [Paragraph("<b>CONTRATO</b>", styles['SmallFont']), Paragraph(data.get('contract_name', 'INANDES FACTOR CAPITAL SAC'), styles['BlueSmallFont'])],
+        [Paragraph("<b>CLIENTE</b>", styles['SmallFont']), Paragraph(data.get('emisor_nombre', 'MILENIO CONSULTORES SAC'), styles['BlueSmallFont'])],
+        [Paragraph("<b>RUC</b>", styles['SmallFont']), Paragraph(data.get('emisor_ruc', '20422894854'), styles['BlueSmallFont'])],
+        [Paragraph("<b>RELACION DE</b>", styles['SmallFont']), Paragraph(data.get('relation_type', 'FACTURA(S)'), styles['BlueSmallFont'])],
+    ]
+    client_info_table = Table(client_info_data, colWidths=[0.8*inch, 5.2*inch])
+    client_info_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (0,-1), 'LEFT'),
+        ('ALIGN', (1,0), (1,-1), 'LEFT'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    left_column_content.append(client_info_table)
 
-        # --- Plazo de Operación Calculation (remains the same) ---
-        if invoice.get('fecha_pago_calculada') and invoice.get('fecha_desembolso_factoring'):
-            fecha_pago_dt = datetime.datetime.strptime(invoice['fecha_pago_calculada'], "%d-%m-%Y")
-            fecha_desembolso_dt = datetime.datetime.strptime(invoice['fecha_desembolso_factoring'], "%d-%m-%Y")
-            invoice['plazo_operacion_calculado'] = (fecha_pago_dt - fecha_desembolso_dt).days if fecha_pago_dt >= fecha_desembolso_dt else 0
-        else:
-            invoice['plazo_operacion_calculado'] = 0
+    # Main header table (combining left column content and logo)
+    header_table_data = [
+        [left_column_content, inandes_logo]
+    ]
+    header_table = Table(header_table_data, colWidths=[6*inch, 1.5*inch]) # Adjust colWidths as needed
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (0,0), 'LEFT'),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+        ('LEFTPADDING', (0,0), (-1,-1), 0),
+        ('RIGHTPADDING', (0,0), (-1,-1), 0),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 0.05 * inch))
 
-    except (ValueError, TypeError, AttributeError):
-        # Reset fields on any error to ensure a consistent state
-        invoice['fecha_pago_calculada'] = ""
-        # Keep plazo_credito_dias as is, to avoid overwriting user input on a temporary error
-        # invoice['plazo_credito_dias'] = 0
-        invoice['plazo_operacion_calculado'] = 0
+    # Anexo and Date
+    styles.add(ParagraphStyle(name='BoldSize7', fontName='Helvetica-Bold', fontSize=7))
+    styles.add(ParagraphStyle(name='BoldSize7Right', parent=styles['BoldSize7'], alignment=TA_RIGHT))
 
-def validate_inputs(invoice):
-    required_fields = {
-        "emisor_nombre": "Nombre del Emisor", "emisor_ruc": "RUC del Emisor",
-        "aceptante_nombre": "Nombre del Aceptante", "aceptante_ruc": "RUC del Aceptante",
-        "numero_factura": "Número de Factura", "moneda_factura": "Moneda de Factura",
-        "fecha_emision_factura": "Fecha de Emisión",
-        "tasa_de_avance": "Tasa de Avance",
-        "interes_mensual": "Interés Mensual", "comision_de_estructuracion": "Comisión de Estructuración",
-        "plazo_credito_dias": "Plazo de Crédito (días)", "fecha_desembolso_factoring": "Fecha de Desembolso",
-    }
-    is_valid = True
-    for key, name in required_fields.items():
-        if not invoice.get(key):
-            is_valid = False
+    anexo_date_data = [
+        [Paragraph(f"<b>ANEXO {data.get('anexo_number', '31')}</b>", styles['BoldSize7']),
+         Paragraph(f"<b>FECHA</b> {data.get('document_date', 'JUEVES 29, MAY, 2025')}", styles['BoldSize7Right'])]
+    ]
+    anexo_date_table = Table(anexo_date_data, colWidths=[doc.width / 2.0, doc.width / 2.0])
+    anexo_date_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.lightgrey),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.black),
+        ('LEFTPADDING', (0,0), (-1,-1), 5),
+        ('RIGHTPADDING', (0,0), (-1,-1), 5),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+        ('TOPPADDING', (0,0), (-1,-1), 1),
+        ('BOX', (0,0), (-1,-1), 0.5, colors.black),
+    ]))
+    story.append(anexo_date_table)
+    story.append(Spacer(1, 0.1 * inch))
+
+    # Table Headers
+    table1_headers = [
+        Paragraph("<b>Nro. Facturas</b>", styles['BoldSmallFont']),
+        Paragraph("<b>Fecha de Vencimiento</b>", styles['BoldSmallFont']),
+        Paragraph("<b>Fecha de Desembolso</b>", styles['BoldSmallFont']),
+        Paragraph("<b># de días</b>", styles['BoldSmallFont']),
+        Paragraph("<b>Girador</b>", styles['BoldSmallFont']),
+        Paragraph("<b>Aceptante</b>", styles['BoldSmallFont']),
+        Paragraph("<b>MONTO NETO SOLES (PEN) / DOLARES (USD)</b>", styles['BoldSmallFont']),
+        Paragraph("<b>Detracción / Retención</b>", styles['BoldSmallFont']),
+    ]
+
+    # Table Data (Example - replace with actual data from 'data' dictionary)
+    table1_data = [table1_headers]
+    styles.add(ParagraphStyle(name='ExtraSmallFont', fontSize=7))
+    for item in data.get('facturas', []):
+        table1_data.append([
+            Paragraph(item.get('invoice_series_and_number', ''), styles['ExtraSmallFont']),
+            Paragraph(item.get('invoice_due_date', ''), styles['ExtraSmallFont']),
+            Paragraph(item.get('invoice_issue_date', ''), styles['ExtraSmallFont']),
+            Paragraph(str(item.get('financing_term_days', '')), styles['ExtraSmallFont']),
+            Paragraph(item.get('invoice_issuer_name', ''), styles['ExtraSmallFont']),
+            Paragraph(item.get('invoice_payer_name', ''), styles['ExtraSmallFont']),
+            Paragraph(f"PEN {item.get('invoice_total_amount', 0.0):,.2f}", styles['ExtraSmallFont']),
+            Paragraph(f"{item.get('detraccion_porcentaje', 0):.2f}%", styles['ExtraSmallFont']),
+        ])
+    table1_data.append([
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("<b>Total</b>", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_monto_neto', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+    ])
+    table1_data.append([
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("<b>(-) Detracciones</b>", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('detracciones_total', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+    ])
+    table1_data.append([
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+        Paragraph("<b>Total Neto</b>", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_neto', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph("", styles['ExtraSmallFont']),
+    ])
+
+    table1 = Table(table1_data, colWidths=[0.928*inch, 0.85*inch, 0.85*inch, 0.5*inch, 1.276*inch, 1.276*inch, 1.1*inch, 0.6*inch])
+    table1.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (7, 0), colors.lightgrey), # Header background for all columns
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+    ('ALIGN', (1, 1), (4, 2), 'RIGHT'), # PEN values in rows 1 and 2
+    ('ALIGN', (1, 3), (4, 3), 'RIGHT'), # PEN values in row 3
+    ('ALIGN', (4, 4), (4, 5), 'RIGHT'), # PEN values in rows 4 and 5
+    ('ALIGN', (7, 3), (7, 3), 'RIGHT'), # PEN value in row 3, col 7
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 3),
+        ('TOPPADDING', (0, 0), (-1, 0), 3),
+        ('GRID', (0, 0), (-1, 0), 0.5, colors.black), # Grid for header
+        ('GRID', (0, 1), (-1, -4), 0.5, colors.black), # Grid for data rows
+        ('GRID', (5, -3), (6, -1), 0.5, colors.black), # Grid for content cells in summary rows
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white), # Body background
+        ('BACKGROUND', (6, -3), (6, -3), colors.lightgrey), # Shade Total PEN cell
+        ('BACKGROUND', (6, -1), (6, -1), colors.lightgrey), # Shade Total Neto PEN cell
+        ('BACKGROUND', (5, -3), (5, -3), colors.lightgrey), # Shade Total cell
+        ('BACKGROUND', (5, -1), (5, -1), colors.lightgrey), # Shade Total Neto cell
+    ]))
+    story.append(table1)
+    story.append(Spacer(1, 0.1 * inch))
+
+    # --- BASE DESCUENTO INTERES COBRADO Table ---
+    table2_headers = [
+        Paragraph("<b>Nro. Facturas</b>", styles['BoldSmallFont']),
+        Paragraph("<b>BASE DESCUENTO</b>", styles['BoldSmallFont']),
+        Paragraph("<b>INTERES COBRADO</b>", styles['BoldSmallFont']),
+        Paragraph("<b>IGV</b>", styles['BoldSmallFont']),
+        Paragraph("<b>ABONO</b>", styles['BoldSmallFont']),
+        Paragraph("", styles['BoldSmallFont']),
+        Paragraph("", styles['BoldSmallFont']),
+        Paragraph("", styles['BoldSmallFont']),
+    ]
+    table2_data = [table2_headers]
+
+    # Iterate over the correct data key 'facturas'
+    for item in data.get('facturas', []):
+        row = [
+            Paragraph(item.get('invoice_series_and_number', ''), styles['SmallFont']),
+            Paragraph(f"PEN {item.get('advance_amount', 0.0):,.2f}", styles['SmallFont']),
+            Paragraph(f"PEN {item.get('commission_amount', 0.0):,.2f}", styles['SmallFont']),
+            Paragraph(f"PEN {item.get('igv_interes_calculado', 0.0):,.2f}", styles['SmallFont']),
+            Paragraph(f"PEN {item.get('initial_disbursement', 0.0):,.2f}", styles['SmallFont']),
+            Paragraph("", styles['SmallFont']),
+            Paragraph("", styles['SmallFont']),
+            Paragraph("", styles['SmallFont']),
+        ]
+        table2_data.append(row)
+
+    # Add summary rows
+    total_row = [
+        Paragraph("", styles['SmallFont']),
+        Paragraph(f"PEN {data.get('total_capital_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_interes_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_igv_interes_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_abono_real_calculado', 0.0):,.2f}", styles['BoldSmallFont']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("Margen de Seguridad", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_margen_seguridad_calculado', 0.0):,.2f}", styles['BoldSmallFontRight']),
+    ]
+    table2_data.append(total_row)
+
+    comision_row = [
+        Paragraph("", styles['SmallFont']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("<b>Comisión + IGV</b>", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("", styles['SmallFont']),
+    ]
+    table2_data.append(comision_row)
+
+    depositar_row = [
+        Paragraph("", styles['SmallFont']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("<b>Total a Depositar:</b>", styles['BoldSmallFont']),
+        Paragraph(f"PEN {data.get('total_a_depositar', 0.0):,.2f}", styles['BoldSmallFontRight']),
+        Paragraph("", styles['SmallFont']),
+        Paragraph("Se devuelve al final de la operación, sirve para cubrir intereses adicionales por atrasos del PAGADOR / ADQUIRIENTE", styles['SmallTinyFont']),
+        Paragraph("", styles['SmallFont']),
+    ]
+    table2_data.append(depositar_row)
+
+    # Define column widths
+    col_widths_t2 = [0.9*inch, 0.9*inch, 0.9*inch, 0.9*inch, 0.9*inch, 1.16*inch, 1.0*inch, 0.7*inch]
+    table2 = Table(table2_data, colWidths=col_widths_t2, hAlign='LEFT')
+
+    # --- Dynamic Styling ---
+    num_data_rows = len(data.get('facturas', []))
+    last_data_row_idx = num_data_rows
+    total_row_idx = last_data_row_idx + 1
+    comision_row_idx = last_data_row_idx + 2
+    depositar_row_idx = last_data_row_idx + 3
     
-    numeric_fields = {
-        "monto_total_factura": "Monto Factura Total", "monto_neto_factura": "Monto Factura Neto",
-        "tasa_de_avance": "Tasa de Avance", "interes_mensual": "Interés Mensual"
-    }
-    for key, name in numeric_fields.items():
-        if invoice.get(key, 0) <= 0:
-            is_valid = False
-    return is_valid
-
-def propagate_commission_changes():
-    # This function is called on_change. It will trigger a rerun.
-    # On the next run, the UI will be updated based on the new state.
-    if st.session_state.get('fijar_condiciones', False) and st.session_state.invoices_data and len(st.session_state.invoices_data) > 1:
-        # Get the most recent values directly from the session state of the first invoice's widgets
-        # This ensures we are using the value that just changed, before the full rerun.
-        first_invoice = st.session_state.invoices_data[0]
-        first_invoice['tasa_de_avance'] = st.session_state.get(f"tasa_de_avance_0", first_invoice['tasa_de_avance'])
-        first_invoice['interes_mensual'] = st.session_state.get(f"interes_mensual_0", first_invoice['interes_mensual'])
-        first_invoice['comision_de_estructuracion'] = st.session_state.get(f"comision_de_estructuracion_0", first_invoice['comision_de_estructuracion'])
-        first_invoice['comision_minima_pen'] = st.session_state.get(f"comision_minima_pen_0", first_invoice['comision_minima_pen'])
-        first_invoice['comision_minima_usd'] = st.session_state.get(f"comision_minima_usd_0", first_invoice['comision_minima_usd'])
-        first_invoice['comision_afiliacion_pen'] = st.session_state.get(f"comision_afiliacion_pen_0", first_invoice['comision_afiliacion_pen'])
-        first_invoice['comision_afiliacion_usd'] = st.session_state.get(f"comision_afiliacion_usd_0", first_invoice['comision_afiliacion_usd'])
-
-        # Now that the first invoice's dictionary is up-to-date, propagate its values
-        for i in range(1, len(st.session_state.invoices_data)):
-            invoice = st.session_state.invoices_data[i]
-            invoice['tasa_de_avance'] = first_invoice['tasa_de_avance']
-            invoice['interes_mensual'] = first_invoice['interes_mensual']
-            invoice['comision_de_estructuracion'] = first_invoice['comision_de_estructuracion']
-            invoice['comision_minima_pen'] = first_invoice['comision_minima_pen']
-            invoice['comision_minima_usd'] = first_invoice['comision_minima_usd']
-            invoice['comision_afiliacion_pen'] = first_invoice['comision_afiliacion_pen']
-            invoice['comision_afiliacion_usd'] = first_invoice['comision_afiliacion_usd']
-
-# --- Inicialización del Session State ---
-
-# --- Inicialización del Session State ---
-if 'invoices_data' not in st.session_state: st.session_state.invoices_data = []
-if 'pdf_datos_cargados' not in st.session_state: st.session_state.pdf_datos_cargados = False
-if 'last_uploaded_pdf_files_ids' not in st.session_state: st.session_state.last_uploaded_pdf_files_ids = []
-if 'last_saved_proposal_id' not in st.session_state: st.session_state.last_saved_proposal_id = ''
-if 'anexo_number' not in st.session_state: st.session_state.anexo_number = ''
-if 'contract_number' not in st.session_state: st.session_state.contract_number = ''
-if 'fijar_condiciones' not in st.session_state: st.session_state.fijar_condiciones = False
-# Default values for new invoices (these will be copied into each invoice's dict)
-if 'default_comision_afiliacion_pen' not in st.session_state: st.session_state.default_comision_afiliacion_pen = 200.0
-if 'default_comision_afiliacion_usd' not in st.session_state: st.session_state.default_comision_afiliacion_usd = 50.0
-if 'default_tasa_de_avance' not in st.session_state: st.session_state.default_tasa_de_avance = 98.0
-if 'default_interes_mensual' not in st.session_state: st.session_state.default_interes_mensual = 1.25
-if 'default_comision_de_estructuracion' not in st.session_state: st.session_state.default_comision_de_estructuracion = 0.5
-if 'default_comision_minima_pen' not in st.session_state: st.session_state.default_comision_minima_pen = 10.0
-if 'default_comision_minima_usd' not in st.session_state: st.session_state.default_comision_minima_usd = 3.0
-
-# --- UI: Título y CSS ---
-try:
-    with open("C:/Users/rguti/Inandes.TECH/.streamlit/style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    pass
-
-# Inject CSS for vertical alignment and right alignment for the last column
-st.markdown("""
-<style>
-[data-testid="stHorizontalBlock"] {
-    align-items: center; /* Aligns items vertically in the center */
-}
-/* Target the image within the third column specifically for right alignment */
-[data-testid="stHorizontalBlock"] > div:nth-child(3) img {
-    margin-left: auto; /* Pushes the image to the right */
-}
-</style>
-""", unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns([0.25, 0.5, 0.25])
-with col1:
-    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/logo.geek.png", width=200)
-with col2:
-    st.markdown("<h2 style='text-align: center; font-size: 2.4em;'>Modulo Operaciones de Factoring</h2>", unsafe_allow_html=True)
-with col3:
-    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", width=150)
-
-# --- UI: Carga de Archivos ---
-with st.expander("", expanded=True):
-    col1, col2 = st.columns([1, 0.00001])
-    with col1:
-        uploaded_pdf_files = st.file_uploader("Seleccionar archivos", type=["pdf"], key="pdf_uploader_main", accept_multiple_files=True)
-    with col2:
-        pass # Button removed
-
-    if uploaded_pdf_files:
-        # Clear previous data if new files are uploaded or file IDs change
-        current_file_ids = [f.file_id for f in uploaded_pdf_files]
-        if "last_uploaded_pdf_files_ids" not in st.session_state or \
-           current_file_ids != st.session_state.last_uploaded_pdf_files_ids:
-            st.session_state.invoices_data = []
-            st.session_state.last_uploaded_pdf_files_ids = current_file_ids
-            st.session_state.pdf_datos_cargados = False # Reset this flag
-
-        if not st.session_state.pdf_datos_cargados: # Process only if not already processed for current files
-            for uploaded_file in uploaded_pdf_files:
-                temp_file_path = os.path.join("C:/Users/rguti/Inandes.TECH/backend", f"temp_uploaded_pdf_{uploaded_file.file_id}.pdf")
-                with open(temp_file_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-
-                with st.spinner(f"Procesando {uploaded_file.name} y consultando base de datos..."):
-                    try:
-                        parsed_data = pdf_parser.extract_fields_from_pdf(temp_file_path)
-                        if parsed_data.get("error"):
-                            st.error(f"Error al procesar el PDF {uploaded_file.name}: {parsed_data['error']}")
-                        else:
-                            invoice_entry = {
-                                'emisor_ruc': parsed_data.get('emisor_ruc', ''),
-                                'aceptante_ruc': parsed_data.get('aceptante_ruc', ''),
-                                'fecha_emision_factura': parsed_data.get('fecha_emision', ''),
-                                'monto_total_factura': parsed_data.get('monto_total', 0.0),
-                                'monto_neto_factura': parsed_data.get('monto_neto', 0.0),
-                                'moneda_factura': parsed_data.get('moneda', 'PEN'),
-                                'numero_factura': parsed_data.get('invoice_id', ''),
-                                'parsed_pdf_name': uploaded_file.name,
-                                'file_id': uploaded_file.file_id,
-                                'emisor_nombre': '',
-                                'aceptante_nombre': '',
-                                'plazo_credito_dias': None,
-                                'fecha_desembolso_factoring': '',
-                                'tasa_de_avance': st.session_state.default_tasa_de_avance,
-                                'interes_mensual': st.session_state.default_interes_mensual,
-                                'comision_de_estructuracion': st.session_state.default_comision_de_estructuracion,
-                                'comision_minima_pen': st.session_state.default_comision_minima_pen,
-                                'comision_minima_usd': st.session_state.default_comision_minima_usd,
-                                'comision_afiliacion_pen': st.session_state.default_comision_afiliacion_pen,
-                                'comision_afiliacion_usd': st.session_state.default_comision_afiliacion_usd,
-                                'aplicar_comision_afiliacion': False,
-                                'detraccion_porcentaje': 0.0, # Will be calculated later
-                                'fecha_pago_calculada': '', # Will be calculated later
-                                'plazo_operacion_calculado': 0, # Will be calculated later
-                                'initial_calc_result': None,
-                                'recalculate_result': None,
-                            }
-
-                            if invoice_entry['emisor_ruc']:
-                                invoice_entry['emisor_nombre'] = supabase_handler.get_razon_social_by_ruc(invoice_entry['emisor_ruc'])
-                            if invoice_entry['aceptante_ruc']:
-                                invoice_entry['aceptante_nombre'] = supabase_handler.get_razon_social_by_ruc(invoice_entry['aceptante_ruc'])
-                            
-                            st.session_state.invoices_data.append(invoice_entry)
-                            st.success(f"Datos de {uploaded_file.name} cargados y enriquecidos. Revisa el formulario.")
-
-                    except Exception as e:
-                        st.error(f"Error al parsear el PDF {uploaded_file.name}: {e}")
-                    finally:
-                        if os.path.exists(temp_file_path):
-                            os.remove(temp_file_path)
-            st.session_state.pdf_datos_cargados = True
-
-    elif "invoices_data" not in st.session_state:
-        st.session_state.invoices_data = []
-        st.session_state.pdf_datos_cargados = False
-        st.session_state.last_uploaded_pdf_files_ids = []
-
-# --- UI: Formulario Principal ---
-if st.session_state.invoices_data:
-    for idx, invoice in enumerate(st.session_state.invoices_data):
-        st.markdown("--- ")
-        st.write(f"### Factura {idx + 1}: {invoice.get('parsed_pdf_name', 'N/A')}")
-
-        # --- UI: Formulario Principal (adaptado para múltiples facturas) ---
-        # Involucrados
-        with st.container():
-            st.write("##### Involucrados")
-            col_emisor_nombre, col_emisor_ruc, col_aceptante_nombre, col_aceptante_ruc = st.columns(4)
-            with col_emisor_nombre:
-                invoice['emisor_nombre'] = st.text_input(" NOMBRE DEL EMISOR", value=invoice.get('emisor_nombre', ''), key=f"emisor_nombre_{idx}", label_visibility="visible")
-            with col_emisor_ruc:
-                invoice['emisor_ruc'] = st.text_input("RUC DEL EMISOR", value=invoice.get('emisor_ruc', ''), key=f"emisor_ruc_{idx}", label_visibility="visible")
-            with col_aceptante_nombre:
-                invoice['aceptante_nombre'] = st.text_input("NOMBRE DEL ACEPTANTE", value=invoice.get('aceptante_nombre', ''), key=f"aceptante_nombre_{idx}", label_visibility="visible")
-            with col_aceptante_ruc:
-                invoice['aceptante_ruc'] = st.text_input("RUC DEL ACEPTANTE", value=invoice.get('aceptante_ruc', ''), key=f"aceptante_ruc_{idx}", label_visibility="visible")
-
-        # Montos y Moneda
-        with st.container():
-            st.write("##### Montos y Moneda")
-            col_num_factura, col_monto_total, col_monto_neto, col_moneda, col_detraccion = st.columns(5)
-            with col_num_factura:
-                invoice['numero_factura'] = st.text_input("NÚMERO DE FACTURA", value=invoice.get('numero_factura', ''), key=f"numero_factura_{idx}", label_visibility="visible")
-            with col_monto_total:
-                invoice['monto_total_factura'] = st.number_input("MONTO FACTURA TOTAL (CON IGV)", min_value=0.0, value=invoice.get('monto_total_factura', 0.0), format="%.2f", key=f"monto_total_factura_{idx}", label_visibility="visible")
-            with col_monto_neto:
-                invoice['monto_neto_factura'] = st.number_input("MONTO FACTURA NETO", min_value=0.0, value=invoice.get('monto_neto_factura', 0.0), format="%.2f", key=f"monto_neto_factura_{idx}", label_visibility="visible")
-            with col_moneda:
-                invoice['moneda_factura'] = st.selectbox("MONEDA DE FACTURA", ["PEN", "USD"], index=["PEN", "USD"].index(invoice.get('moneda_factura', 'PEN')), key=f"moneda_factura_{idx}", label_visibility="visible")
-            with col_detraccion:
-                detraccion_retencion_pct = 0.0
-                if invoice.get('monto_total_factura', 0) > 0:
-                    detraccion_retencion_pct = ((invoice['monto_total_factura'] - invoice['monto_neto_factura']) / invoice['monto_total_factura']) * 100
-                invoice['detraccion_porcentaje'] = detraccion_retencion_pct
-                st.text_input("Detracción / Retención (%)", value=f"{detraccion_retencion_pct:.2f}%", disabled=True, key=f"detraccion_porcentaje_{idx}", label_visibility="visible")
-
-        # Fechas y Plazos
-        with st.container():
-            st.write("##### Fechas y Plazos")
-
-            # Helper to parse date string to date object, returns None on failure
-            def to_date_obj(date_str):
-                if not date_str or not isinstance(date_str, str): return None
-                try:
-                    return datetime.datetime.strptime(date_str, '%d-%m-%Y').date()
-                except (ValueError, TypeError):
-                    return None
-
-            col_fecha_emision, col_plazo_credito, col_fecha_pago, col_fecha_desembolso, col_plazo_operacion = st.columns(5)
-
-            with col_fecha_emision:
-                fecha_emision_obj = to_date_obj(invoice.get('fecha_emision_factura'))
-                
-                # Disable the input if a date was successfully parsed from the PDF
-                is_disabled = bool(fecha_emision_obj)
-
-                nueva_fecha_emision_obj = st.date_input(
-                    "Fecha de Emisión",
-                    value=fecha_emision_obj,
-                    key=f"fecha_emision_factura_{idx}",
-                    format="DD-MM-YYYY",
-                    disabled=is_disabled
-                )
-
-                # If the field is enabled (i.e., not parsed from PDF), update the session state with the user's input
-                if not is_disabled:
-                    if nueva_fecha_emision_obj:
-                        invoice['fecha_emision_factura'] = nueva_fecha_emision_obj.strftime('%d-%m-%Y')
-                    else:
-                        # If the user clears the date, set it to an empty string
-                        invoice['fecha_emision_factura'] = ''
-
-            # --- Callbacks for bidirectional updates ---
-            def plazo_changed(idx):
-                new_plazo = st.session_state.get(f"plazo_credito_dias_{idx}")
-                st.session_state.invoices_data[idx]['plazo_credito_dias'] = new_plazo
-                update_date_calculations(st.session_state.invoices_data[idx], changed_field='plazo')
-
-            def fecha_pago_changed(idx):
-                new_date_obj = st.session_state.get(f"fecha_pago_calculada_{idx}")
-                if new_date_obj:
-                    st.session_state.invoices_data[idx]['fecha_pago_calculada'] = new_date_obj.strftime('%d-%m-%Y')
-                else:
-                    st.session_state.invoices_data[idx]['fecha_pago_calculada'] = ''
-                update_date_calculations(st.session_state.invoices_data[idx], changed_field='fecha')
-
-            def fecha_desembolso_changed(idx):
-                new_date_obj = st.session_state.get(f"fecha_desembolso_factoring_{idx}")
-                if new_date_obj:
-                    st.session_state.invoices_data[idx]['fecha_desembolso_factoring'] = new_date_obj.strftime('%d-%m-%Y')
-                else:
-                    st.session_state.invoices_data[idx]['fecha_desembolso_factoring'] = ''
-                update_date_calculations(st.session_state.invoices_data[idx])
-
-                        
-
-            with col_plazo_credito:
-                plazo_value = invoice.get('plazo_credito_dias')
-                display_value = int(plazo_value) if plazo_value is not None else 0
-                st.number_input(
-                    "Plazo de Crédito (días)",
-                    min_value=0,
-                    step=1,
-                    value=display_value,
-                    key=f"plazo_credito_dias_{idx}",
-                    on_change=plazo_changed,
-                    args=(idx,)
-                )
-
-            with col_fecha_pago:
-                fecha_pago_obj = to_date_obj(invoice.get('fecha_pago_calculada'))
-                st.date_input(
-                    "Fecha de Pago",
-                    value=fecha_pago_obj,
-                    key=f"fecha_pago_calculada_{idx}",
-                    format="DD-MM-YYYY",
-                    on_change=fecha_pago_changed,
-                    args=(idx,)
-                )
-
-            with col_fecha_desembolso:
-                fecha_desembolso_obj = to_date_obj(invoice.get('fecha_desembolso_factoring'))
-                st.date_input(
-                    "Fecha de Desembolso",
-                    value=fecha_desembolso_obj,
-                    key=f"fecha_desembolso_factoring_{idx}",
-                    format="DD-MM-YYYY",
-                    on_change=fecha_desembolso_changed,
-                    args=(idx,)
-                )
-
-            with col_plazo_operacion:
-                st.number_input("Plazo de Operación (días)", value=invoice.get('plazo_operacion_calculado', 0), disabled=True, key=f"plazo_operacion_calculado_{idx}", label_visibility="visible")
-
-        # Tasas y Comisiones
-        with st.container():
-            st.write("##### Tasas y Comisiones")
-            st.write("") # Empty row for spacing
-
-            # Determine if fields should be disabled (i.e., if it's not the first invoice and conditions are fixed)
-            is_disabled = idx > 0 and st.session_state.fijar_condiciones
-
-            col_tasa_avance, col_interes_mensual, col_comision_estructuracion, col_comision_min_pen, col_comision_min_usd, col_comision_afil_pen, col_comision_afil_usd = st.columns([0.8, 0.8, 1.4, 1, 1, 1, 1])
-            with col_tasa_avance:
-                invoice['tasa_de_avance'] = st.number_input("Tasa de Avance (%)", min_value=0.0, value=invoice.get('tasa_de_avance', st.session_state.default_tasa_de_avance), format="%.2f", key=f"tasa_de_avance_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
-            with col_interes_mensual:
-                invoice['interes_mensual'] = st.number_input("Interés Mensual (%)", min_value=0.0, value=invoice.get('interes_mensual', st.session_state.default_interes_mensual), format="%.2f", key=f"interes_mensual_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
-            with col_comision_estructuracion:
-                invoice['comision_de_estructuracion'] = st.number_input("Comisión de Estructuración (%)", min_value=0.0, value=invoice.get('comision_de_estructuracion', st.session_state.default_comision_de_estructuracion), format="%.2f", key=f"comision_de_estructuracion_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
-            with col_comision_min_pen:
-                invoice['comision_minima_pen'] = st.number_input("Comisión Mínima (PEN)", min_value=0.0, value=invoice.get('comision_minima_pen', st.session_state.default_comision_minima_pen), format="%.2f", key=f"comision_minima_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
-            with col_comision_min_usd:
-                invoice['comision_minima_usd'] = st.number_input("Comisión Mínima (USD)", min_value=0.0, value=invoice.get('comision_minima_usd', st.session_state.default_comision_minima_usd), format="%.2f", key=f"comision_minima_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
-            with col_comision_afil_pen:
-                invoice['comision_afiliacion_pen'] = st.number_input("Comisión de Afiliación (PEN)", min_value=0.0, value=invoice.get('comision_afiliacion_pen', st.session_state.default_comision_afiliacion_pen), format="%.2f", key=f"comision_afiliacion_pen_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
-            with col_comision_afil_usd:
-                invoice['comision_afiliacion_usd'] = st.number_input("Comisión de Afiliación (USD)", min_value=0.0, value=invoice.get('comision_afiliacion_usd', st.session_state.default_comision_afiliacion_usd), format="%.2f", key=f"comision_afiliacion_usd_{idx}", label_visibility="visible", on_change=propagate_commission_changes, disabled=is_disabled)
-
-        # Checkboxes are placed after the main commission inputs
-        col_fijar, col_afiliacion = st.columns(2)
-        with col_fijar:
-            # The "Fijar condiciones" checkbox is only shown for the first invoice
-            if idx == 0:
-                st.checkbox("Fijar condiciones", key='fijar_condiciones', on_change=propagate_commission_changes)
-        with col_afiliacion:
-            invoice['aplicar_comision_afiliacion'] = st.checkbox("Aplicar Comisión de Afiliación", value=invoice.get('aplicar_comision_afiliacion', False), key=f"aplicar_comision_afiliacion_{idx}")
-
-        st.markdown("--- ")
-
-        # --- Pasos de Cálculo y Acción (adaptado para múltiples facturas) ---
-        col_paso1, col_resultados = st.columns([0.2, 3.8]) # Narrow for button, wide for table
-
-        with col_paso1:
-            
-
-            # The button is active only when all required fields are filled
-            campos_requeridos_completos = validate_inputs(invoice)
-
-            if st.button(f"Calcular", key=f"calc_initial_disbursement_{idx}", disabled=not campos_requeridos_completos):
-                if campos_requeridos_completos:
-                    api_data = {
-                        "plazo_operacion": invoice['plazo_operacion_calculado'],
-                        "mfn": invoice['monto_neto_factura'],
-                        "tasa_avance": invoice['tasa_de_avance'] / 100,
-                        "interes_mensual": invoice['interes_mensual'] / 100,
-                        "comision_estructuracion_pct": invoice['comision_de_estructuracion'] / 100,
-                        "moneda_factura": invoice['moneda_factura'],
-                        "comision_min_pen": invoice['comision_minima_pen'],
-                        "comision_min_usd": invoice['comision_minima_usd'],
-                        "igv_pct": 0.18,
-                        "comision_afiliacion_valor": invoice['comision_afiliacion_pen'],
-                        "comision_afiliacion_usd_valor": invoice['comision_afiliacion_usd'],
-                        "aplicar_comision_afiliacion": invoice['aplicar_comision_afiliacion'],
-                        "monto_desembolsar_manual": 0
-                    }
-                    with st.spinner(f'Calculando desembolso para Factura {idx + 1}...'):
-                        try:
-                            response = requests.post(f"{API_BASE_URL}/calcular_desembolso", json=api_data)
-                            response.raise_for_status()
-                            invoice['initial_calc_result'] = response.json()
-
-                            # Automatizar el Paso 2
-                            if invoice['initial_calc_result'] and 'abono_real_teorico' in invoice['initial_calc_result']:
-                                abono_real_teorico = invoice['initial_calc_result']['abono_real_teorico']
-                                monto_desembolsar_objetivo = (abono_real_teorico // 10) * 10 # Redondear a la decena inferior
-
-                                api_data_recalculate = {
-                                    "plazo_operacion": invoice['plazo_operacion_calculado'],
-                                    "mfn": invoice['monto_neto_factura'],
-                                    "interes_mensual": invoice['interes_mensual'] / 100,
-                                    "comision_estructuracion_pct": invoice['comision_de_estructuracion'] / 100,
-                                    "moneda_factura": invoice['moneda_factura'],
-                                    "comision_min_pen": invoice['comision_minima_pen'],
-                                    "comision_min_usd": invoice['comision_minima_usd'],
-                                    "igv_pct": 0.18,
-                                    "comision_afiliacion_valor": invoice['comision_afiliacion_pen'],
-                                    "comision_afiliacion_usd_valor": invoice['comision_afiliacion_usd'],
-                                    "aplicar_comision_afiliacion": invoice['aplicar_comision_afiliacion'],
-                                    "monto_objetivo": monto_desembolsar_objetivo
-                                }
-                                with st.spinner(f'Buscando tasa de avance automáticamente para Factura {idx + 1}...'):
-                                    response_recalculate = requests.post(f"{API_BASE_URL}/encontrar_tasa", json=api_data_recalculate)
-                                    response_recalculate.raise_for_status()
-                                    invoice['recalculate_result'] = response_recalculate.json()
-                            else:
-                                invoice['recalculate_result'] = None
-
-                        except requests.exceptions.RequestException as e:
-                            st.error(f"Error de conexión con la API para Factura {idx + 1}: {e}")
-
-        with col_resultados:
-            # CSS para reducir el tamaño de la fuente de los labels en los resultados iterativos
-            st.markdown("""
-            <style>
-            /* Reduce font size for the 'Calcular' button */
-            .stButton>button {
-                font-size: 0.8em; /* Adjust as needed */
-                padding: 0.25em 0.5em; /* Adjust padding to fit text */
-            }
-            label {
-                font-size: 0.1em !important; /* Reducido al mínimo para prueba */
-            }
-            </style>
-            """, unsafe_allow_html=True)
-
-            if invoice.get('recalculate_result'):
-                st.write("##### Perfil de la Operación")
-                st.markdown(
-                    f"**Emisor:** {invoice.get('emisor_nombre', 'N/A')} | "
-                    f"**Aceptante:** {invoice.get('aceptante_nombre', 'N/A')} | "
-                    f"**Factura:** {invoice.get('numero_factura', 'N/A')} | "
-                    f"**F. Emisión:** {invoice.get('fecha_emision_factura', 'N/A')} | "
-                    f"**F. Pago:** {invoice.get('fecha_pago_calculada', 'N/A')} | "
-                    f"**Monto Total:** {invoice.get('moneda_factura', '')} {invoice.get('monto_total_factura', 0):,.2f} | "
-                    f"**Monto Neto:** {invoice.get('moneda_factura', '')} {invoice.get('monto_neto_factura', 0):,.2f}"
-                )
-                recalc_result = invoice['recalculate_result']
-                desglose = recalc_result.get('desglose_final_detallado', {})
-                calculos = recalc_result.get('calculo_con_tasa_encontrada', {})
-                busqueda = recalc_result.get('resultado_busqueda', {})
-                moneda = invoice.get('moneda_factura', 'PEN')
-
-                # --- Preparar todos los datos necesarios ---
-                tasa_avance_pct = busqueda.get('tasa_avance_encontrada', 0) * 100
-                monto_neto = invoice.get('monto_neto_factura', 0)
-                capital = calculos.get('capital', 0)
-                
-                abono = desglose.get('abono', {})
-                interes = desglose.get('interes', {})
-                com_est = desglose.get('comision_estructuracion', {})
-                com_afi = desglose.get('comision_afiliacion', {})
-                igv = desglose.get('igv_total', {})
-                margen = desglose.get('margen_seguridad', {})
-
-                costos_totales = interes.get('monto', 0) + com_est.get('monto', 0) + com_afi.get('monto', 0) + igv.get('monto', 0)
-                tasa_diaria_pct = (invoice.get('interes_mensual', 0) / 30) 
-
-                # --- Construir la tabla en Markdown línea por línea para evitar errores de formato ---
-                lines = []
-                lines.append(f"| Item | Monto ({moneda}) | % sobre Neto | Fórmula de Cálculo | Detalle del Cálculo |")
-                lines.append("| :--- | :--- | :--- | :--- | :--- |")
-                lines.append(f"| Monto Neto de Factura | {monto_neto:,.2f} | 100.00% | `Dato de entrada` | Monto total de la factura menos detraccion/retencion |")
-                lines.append(f"| Margen de Seguridad | {margen.get('monto', 0):,.2f} | {margen.get('porcentaje', 0):.2f}% | `Monto Neto - Capital` | `{monto_neto:,.2f} - {capital:,.2f} = {margen.get('monto', 0):,.2f}` |")
-                lines.append(f"| Tasa de Avance Aplicada | N/A | {tasa_avance_pct:.2f}% | `Tasa final de la operación` | N/A |")
-                lines.append(f"| Capital | {capital:,.2f} | {((capital / monto_neto) * 100) if monto_neto else 0:.2f}% | `Monto Neto * (Tasa de Avance / 100)` | `{monto_neto:,.2f} * ({tasa_avance_pct:.2f} / 100) = {capital:,.2f}` |")
-                lines.append(f"| Intereses | {interes.get('monto', 0):,.2f} | {interes.get('porcentaje', 0):.2f}% | `Capital * ((1 + Tasa Diaria)^Plazo - 1)` | Tasa Diaria: `{invoice.get('interes_mensual', 0):.2f}% / 30 = {tasa_diaria_pct:.4f}%`, Plazo: `{calculos.get('plazo_operacion', 0)} días`. Cálculo: `{capital:,.2f} * ((1 + {tasa_diaria_pct/100:.6f})^{calculos.get('plazo_operacion', 0)} - 1) = {interes.get('monto', 0):,.2f}` |")
-                lines.append(f"| Comisión de Estructuración | {com_est.get('monto', 0):,.2f} | {com_est.get('porcentaje', 0):.2f}% | `MAX(Capital * %Comisión, Mínima)` | Base: `{capital:,.2f} * ({invoice.get('comision_de_estructuracion',0):.2f} / 100) = {capital * (invoice.get('comision_de_estructuracion',0)/100):.2f}`, Mín: `{invoice.get('comision_minima_pen',0) if moneda == 'PEN' else invoice.get('comision_minima_usd',0):.2f}`. Resultado: `{com_est.get('monto', 0):,.2f}` |")
-                if com_afi.get('monto', 0) > 0:
-                    lines.append(f"| Comisión de Afiliación | {com_afi.get('monto', 0):,.2f} | {com_afi.get('porcentaje', 0):.2f}% | `Valor Fijo (si aplica)` | Monto fijo para la moneda {moneda}. |")
-                
-                igv_interes_monto = calculos.get('igv_interes', 0)
-                igv_interes_pct = (igv_interes_monto / monto_neto * 100) if monto_neto else 0
-                lines.append(f"| IGV sobre Intereses | {igv_interes_monto:,.2f} | {igv_interes_pct:.2f}% | `Intereses * 18%` | `{interes.get('monto', 0):,.2f} * 18% = {igv_interes_monto:,.2f}` |")
-
-                igv_com_est_monto = calculos.get('igv_comision_estructuracion', 0)
-                igv_com_est_pct = (igv_com_est_monto / monto_neto * 100) if monto_neto else 0
-                lines.append(f"| IGV sobre Com. de Estruct. | {igv_com_est_monto:,.2f} | {igv_com_est_pct:.2f}% | `Comisión * 18%` | `{com_est.get('monto', 0):,.2f} * 18% = {igv_com_est_monto:,.2f}` |")
-
-                if com_afi.get('monto', 0) > 0:
-                    igv_com_afi_monto = calculos.get('igv_afiliacion', 0)
-                    igv_com_afi_pct = (igv_com_afi_monto / monto_neto * 100) if monto_neto else 0
-                    lines.append(f"| IGV sobre Com. de Afiliación | {igv_com_afi_monto:,.2f} | {igv_com_afi_pct:.2f}% | `Comisión * 18%` | `{com_afi.get('monto', 0):,.2f} * 18% = {igv_com_afi_monto:,.2f}` |")
-
-                lines.append("| | | | | |")
-                lines.append(f"| **Monto a Desembolsar** | **{abono.get('monto', 0):,.2f}** | **{abono.get('porcentaje', 0):.2f}%** | `Capital - Costos Totales` | `{capital:,.2f} - {costos_totales:,.2f} = {abono.get('monto', 0):,.2f}` |")
-                lines.append("| | | | | |")
-                lines.append(f"| **Total (Monto Neto Factura)** | **{monto_neto:,.2f}** | **100.00%** | `Abono + Costos + Margen` | `{abono.get('monto', 0):,.2f} + {costos_totales:,.2f} + {margen.get('monto', 0):,.2f} = {monto_neto:,.2f}` |")
-                
-                tabla_md = "\n".join(lines)
-                st.markdown(tabla_md, unsafe_allow_html=True)
-
-        st.markdown("--- ") # Separador después del botón
-
-
-# --- Pasos 3 y 4: Grabar e Imprimir ---
-
-
-# Creación de la estructura de dos columnas
-col_paso3, col_consulta = st.columns(2)
-
-with col_paso3:
-    st.write("#### Grabar Propuesta")
-    st.write("##### 1. Ingresar Datos de Contrato")
-
-    # Inputs apilados verticalmente como se solicitó
-    st.session_state.anexo_number = st.text_input("Número de Anexo", value=st.session_state.anexo_number, key="anexo_number_global")
-    st.session_state.contract_number = st.text_input("Número de Contrato", value=st.session_state.contract_number, key="contract_number_global")
-
-    can_save_proposal = any(invoice.get('recalculate_result') for invoice in st.session_state.invoices_data)
-
-    if st.button("GRABAR Propuesta en Base de Datos", disabled=not can_save_proposal):
-        if can_save_proposal:
-            for idx, invoice in enumerate(st.session_state.invoices_data):
-                if invoice.get('recalculate_result'):
-                    with st.spinner(f"Guardando propuesta para Factura {idx + 1}..."):
-                        temp_session_data = {
-                            'emisor_nombre': invoice.get('emisor_nombre'),
-                            'emisor_ruc': invoice.get('emisor_ruc'),
-                            'aceptante_nombre': invoice.get('aceptante_nombre'),
-                            'aceptante_ruc': invoice.get('aceptante_ruc'),
-                            'numero_factura': invoice.get('numero_factura'),
-                            'monto_total_factura': invoice.get('monto_total_factura'),
-                            'monto_neto_factura': invoice.get('monto_neto_factura'),
-                            'moneda_factura': invoice.get('moneda_factura'),
-                            'fecha_emision_factura': invoice.get('fecha_emision_factura'),
-                            'plazo_credito_dias': invoice.get('plazo_credito_dias'),
-                            'fecha_desembolso_factoring': invoice.get('fecha_desembolso_factoring'),
-                            'tasa_de_avance': invoice.get('tasa_de_avance'),
-                            'interes_mensual': invoice.get('interes_mensual'),
-                            'comision_de_estructuracion': invoice.get('comision_de_estructuracion'),
-                            'comision_minima_pen': invoice.get('comision_minima_pen'),
-                            'comision_minima_usd': invoice.get('comision_minima_usd'),
-                            'comision_afiliacion_pen': invoice.get('comision_afiliacion_pen'),
-                            'comision_afiliacion_usd': invoice.get('comision_afiliacion_usd'),
-                            'aplicar_comision_afiliacion': invoice.get('aplicar_comision_afiliacion'),
-                            'detraccion_porcentaje': invoice.get('detraccion_porcentaje'),
-                            'fecha_pago_calculada': invoice.get('fecha_pago_calculada'),
-                            'plazo_operacion_calculado': invoice.get('plazo_operacion_calculado'),
-                            'initial_calc_result': invoice.get('initial_calc_result'),
-                            'recalculate_result': invoice.get('recalculate_result'),
-                            'anexo_number': st.session_state.anexo_number,
-                            'contract_number': st.session_state.contract_number,
-                        }
-                        success, message = supabase_handler.save_proposal(temp_session_data)
-                        if success:
-                            st.success(message)
-                            if "Propuesta con ID" in message:
-                                start_index = message.find("ID ") + 3
-                                end_index = message.find(" guardada")
-                                newly_saved_id = message[start_index:end_index]
-                                st.session_state.last_saved_proposal_id = newly_saved_id
-
-                                # --- MEJORA: Añadir automáticamente a la lista de impresión ---
-                                if 'accumulated_proposals' not in st.session_state:
-                                    st.session_state.accumulated_proposals = []
-                                
-                                full_proposal_details = supabase_handler.get_proposal_details_by_id(newly_saved_id)
-                                if full_proposal_details and 'proposal_id' in full_proposal_details:
-                                    if not any(p.get('proposal_id') == newly_saved_id for p in st.session_state.accumulated_proposals):
-                                        st.session_state.accumulated_proposals.append(full_proposal_details)
-                                        st.success(f"Propuesta {newly_saved_id} añadida a la lista de impresión.")
-                                # --- FIN MEJORA ---
-                        else:
-                            st.error(message)
-        else:
-            st.warning("No hay resultados de cálculo para guardar.")
-
-    # New button for printing individual profiles
-    can_print_profiles = any(invoice.get('recalculate_result') for invoice in st.session_state.invoices_data)
-    if st.button("Imprimir Perfiles", disabled=not can_print_profiles):
-        if can_print_profiles:
-            st.write("Generando PDFs de perfiles individuales...")
-            generated_pdf_paths = []
-            for idx, invoice in enumerate(st.session_state.invoices_data):
-                if invoice.get('recalculate_result'):
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    output_filename = f"perfil_factura_{invoice.get('numero_factura', idx+1)}_{timestamp}.pdf"
-                    output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", output_filename)
-
-                    invoice_json = json.dumps(invoice)
-                    print_date = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-
-                    command = [
-                        "python", "C:/Users/rguti/Inandes.TECH/backend/perfil_pdf.py",
-                        f"--output_filepath={output_filepath}",
-                        f"--invoice_json={invoice_json}",
-                        f"--print_date={print_date}"
-                    ]
-                    try:
-                        result = subprocess.run(command, check=True, capture_output=True, text=True)
-                        if result.stderr:
-                            st.warning(f"Advertencias/Errores del generador de perfil PDF para {invoice.get('numero_factura', '')}: {result.stderr}")
-                        if os.path.exists(output_filepath):
-                            generated_pdf_paths.append(output_filepath)
-                            st.success(f"Perfil PDF para Factura {invoice.get('numero_factura', '')} generado.")
-                        else:
-                            st.error(f"Error: El perfil PDF para Factura {invoice.get('numero_factura', '')} no se generó correctamente.")
-                    except subprocess.CalledProcessError as e:
-                        st.error(f"Error al generar perfil PDF para Factura {invoice.get('numero_factura', '')}: {e}\nSalida del error: {e.stderr}")
-                    except FileNotFoundError:
-                        st.error("Error: El script perfil_pdf.py no fue encontrado.")
-            
-            if generated_pdf_paths:
-                st.success("Todos los perfiles PDF generados. Puedes descargarlos a continuación:")
-                for pdf_path in generated_pdf_paths:
-                    with open(pdf_path, "rb") as file:
-                        st.download_button(
-                            label=f"Descargar {os.path.basename(pdf_path)}",
-                            data=file.read(),
-                            file_name=os.path.basename(pdf_path),
-                            mime="application/pdf"
-                        )
-                    os.remove(pdf_path)
-            else:
-                st.warning("No se generaron perfiles PDF. Asegúrate de que haya facturas calculadas.")
-        else:
-            st.warning("No hay resultados de cálculo para generar perfiles PDF.")
-
-with col_consulta:
-    st.write("#### Consulta y Generación de PDF")
-
-    # --- Funcionalidad 1: Añadir propuesta actual ---
-    st.write("##### 1. Añadir Propuesta(s) en Pantalla")
-    if st.button("Añadir a la Lista de Impresión", help="Agrega las propuestas calculadas en esta sesión a la lista de abajo para generar el PDF."):
-        if 'accumulated_proposals' not in st.session_state:
-            st.session_state.accumulated_proposals = []
-
-        proposals_added = 0
-        for idx, invoice in enumerate(st.session_state.invoices_data):
-            if invoice.get('recalculate_result'):
-                # Crear un ID único para la propuesta de la sesión
-                session_proposal_id = f"session_{invoice.get('file_id', idx)}"
-
-                # Evitar añadir duplicados de la misma sesión
-                if not any(p.get('proposal_id') == session_proposal_id for p in st.session_state.accumulated_proposals):
-                    # Mapear los datos de la factura de la sesión al formato de propuesta
-                    # Este formato debe ser compatible con el generador de PDF
-                    proposal_data = {
-                        'proposal_id': session_proposal_id,
-                        'invoice_issuer_name': invoice.get('emisor_nombre'),
-                        'invoice_issuer_ruc': invoice.get('emisor_ruc'),
-                        'invoice_acceptor_name': invoice.get('aceptante_nombre'),
-                        'invoice_acceptor_ruc': invoice.get('aceptante_ruc'),
-                        'invoice_number': invoice.get('numero_factura'),
-                        'invoice_total_amount': invoice.get('monto_total_factura'),
-                        'invoice_net_amount': invoice.get('monto_neto_factura'),
-                        'invoice_currency': invoice.get('moneda_factura'),
-                        'invoice_issue_date': invoice.get('fecha_emision_factura'),
-                        'credit_term_days': invoice.get('plazo_credito_dias'),
-                        'disbursement_date': invoice.get('fecha_desembolso_factoring'),
-                        'advance_rate': invoice.get('recalculate_result', {}).get('resultado_busqueda', {}).get('tasa_avance_encontrada', 0) * 100,
-                        'monthly_interest_rate': invoice.get('interes_mensual'),
-                        'structuring_commission_rate': invoice.get('comision_de_estructuracion'),
-                        'min_commission_pen': invoice.get('comision_minima_pen'),
-                        'min_commission_usd': invoice.get('comision_minima_usd'),
-                        'affiliation_commission_pen': invoice.get('comision_afiliacion_pen'),
-                        'affiliation_commission_usd': invoice.get('comision_afiliacion_usd'),
-                        'apply_affiliation_commission': invoice.get('aplicar_comision_afiliacion'),
-                        'detraccion_percentage': invoice.get('detraccion_porcentaje'),
-                        'calculated_payment_date': invoice.get('fecha_pago_calculada'),
-                        'calculated_operation_days': invoice.get('plazo_operacion_calculado'),
-                        'initial_disbursement': invoice.get('recalculate_result', {}).get('desglose_final_detallado', {}).get('abono', {}).get('monto', 0),
-                        'total_costs': invoice.get('recalculate_result', {}).get('calculo_con_tasa_encontrada', {}).get('costos_totales', 0),
-                        'security_margin': invoice.get('recalculate_result', {}).get('desglose_final_detallado', {}).get('margen_seguridad', {}).get('monto', 0),
-                        'anexo_number': st.session_state.anexo_number,
-                        'contract_number': st.session_state.contract_number,
-                        'calculation_details': invoice.get('recalculate_result'), # Guardar todos los detalles
-                        'is_session_proposal': True # Flag para identificarla en la UI
-                    }
-                    st.session_state.accumulated_proposals.append(proposal_data)
-                    proposals_added += 1
+    style_commands = [
+        ('BACKGROUND', (0, 0), (-1, -1), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+        ('BACKGROUND', (0, 0), (4, 0), colors.lightgrey),
+        ('BACKGROUND', (5, 0), (7, 0), colors.white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
+        ('TOPPADDING', (0, 0), (-1, 0), 6),
+        ('GRID', (0, 0), (4, 0), 0.5, colors.black),
         
-        if proposals_added > 0:
-            st.success(f"{proposals_added} propuesta(s) de la sesión actual han sido añadidas a la lista de impresión.")
-        else:
-            st.warning("No se encontraron propuestas calculadas en la sesión actual para añadir. Por favor, haz clic en 'Calcular' primero.")
-
-    st.markdown("---")
-
-    # --- UI: Consulta y Selección de Propuestas (Funcionalidad 2 y 3) ---
-    st.write("###### 2. Buscar y Seleccionar Propuestas Guardadas")
-    with st.expander("Buscar en Base de Datos", expanded=False):
-        col_id_propuesta, col_razon_social = st.columns(2)
-        with col_id_propuesta:
-            st.text_input("ID Propuesta (Opcional)", key="search_proposal_id", value=st.session_state.last_saved_proposal_id)
-        with col_razon_social:
-            st.text_input("Razón Social del Emisor", key="search_emisor_nombre")
-
-        if st.button("Buscar y Añadir a la Lista"):
-            if 'accumulated_proposals' not in st.session_state:
-                st.session_state.accumulated_proposals = []
-
-            search_found = False
-            if st.session_state.search_proposal_id:
-                proposal = supabase_handler.get_proposal_details_by_id(st.session_state.search_proposal_id)
-                if proposal and 'proposal_id' in proposal:
-                    if not any(p['proposal_id'] == proposal['proposal_id'] for p in st.session_state.accumulated_proposals):
-                        st.session_state.accumulated_proposals.append(proposal)
-                        search_found = True
-                else:
-                    st.info(f"No se encontró ninguna propuesta con el ID: {st.session_state.search_proposal_id}")
-            
-            elif st.session_state.search_emisor_nombre:
-                found_proposals_partial = supabase_handler.get_active_proposals_by_emisor_nombre(st.session_state.search_emisor_nombre)
-                if found_proposals_partial:
-                    for proposal_partial in found_proposals_partial:
-                        full_proposal_details = supabase_handler.get_proposal_details_by_id(proposal_partial['proposal_id'])
-                        if full_proposal_details and 'proposal_id' in full_proposal_details:
-                            if not any(p['proposal_id'] == full_proposal_details['proposal_id'] for p in st.session_state.accumulated_proposals):
-                                st.session_state.accumulated_proposals.append(full_proposal_details)
-                                search_found = True
-                else:
-                    st.info(f"No se encontraron propuestas activas para: {st.session_state.search_emisor_nombre}")
-            else:
-                st.warning("Por favor, ingresa un ID de Propuesta o una Razón Social para buscar.")
-            
-            if search_found:
-                st.success("Propuesta(s) encontradas y añadidas a la lista de impresión.")
-
-    st.markdown("---")
-    st.write("###### 3. Lista de Propuestas para Imprimir")
+        # Grid for data rows
+        ('GRID', (0, 1), (4, last_data_row_idx), 0.5, colors.black),
+        
+        # Grid for summary rows
+        ('GRID', (1, total_row_idx), (4, total_row_idx), 0.5, colors.black),
+        ('GRID', (3, comision_row_idx), (4, depositar_row_idx), 0.5, colors.black),
+        
+        # Backgrounds for summary rows
+        ('BACKGROUND', (1, total_row_idx), (4, total_row_idx), colors.lightgrey),
+        ('BACKGROUND', (3, depositar_row_idx), (4, depositar_row_idx), colors.lightgrey),
+        ('BACKGROUND', (6, total_row_idx), (6, comision_row_idx), colors.lightgrey),
+        ('GRID', (6, total_row_idx), (6, comision_row_idx), 0.5, colors.black),
+        ('BACKGROUND', (7, total_row_idx), (7, comision_row_idx), colors.white),
+        ('GRID', (7, total_row_idx), (7, comision_row_idx), 0.5, colors.black),
+        ('BACKGROUND', (6, depositar_row_idx), (7, depositar_row_idx), colors.white),
+        
+        # SPAN commands
+        ('SPAN', (5, total_row_idx), (5, comision_row_idx)),
+        ('SPAN', (6, total_row_idx), (6, comision_row_idx)),
+        ('SPAN', (7, total_row_idx), (7, comision_row_idx)),
+        ('SPAN', (6, depositar_row_idx), (7, depositar_row_idx)),
+        
+        # Font for summary rows
+        ('FONTNAME', (1, total_row_idx), (4, total_row_idx), 'Helvetica-Bold'),
+        ('FONTNAME', (3, comision_row_idx), (4, depositar_row_idx), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (3, comision_row_idx), (4, depositar_row_idx), 3),
+        ('TOPPADDING', (3, comision_row_idx), (4, depositar_row_idx), 3),
+        
+        # Padding for last row
+        ('TOPPADDING', (0, depositar_row_idx), (-1, depositar_row_idx), 0),
+        ('BOTTOMPADDING', (0, depositar_row_idx), (-1, depositar_row_idx), 0),
+    ]
     
-    # Display the accumulated proposals (laundry list)
-    if 'accumulated_proposals' in st.session_state and st.session_state.accumulated_proposals:
-        if 'selected_proposals_checkboxes' not in st.session_state:
-            st.session_state.selected_proposals_checkboxes = {}
+    table2.setStyle(TableStyle(style_commands))
 
-        for i, proposal in enumerate(st.session_state.accumulated_proposals):
-            if 'proposal_id' not in proposal: continue
-            
-            checkbox_key = f"accum_prop_checkbox_{proposal['proposal_id']}"
-            if checkbox_key not in st.session_state.selected_proposals_checkboxes:
-                st.session_state.selected_proposals_checkboxes[checkbox_key] = True
+    
+    story.append(table2)
+    story.append(Spacer(1, 0.1 * inch))
 
-            col_check, col_id, col_emisor, col_monto = st.columns([0.1, 0.3, 0.3, 0.3])
-            with col_check:
-                st.session_state.selected_proposals_checkboxes[checkbox_key] = st.checkbox("", value=st.session_state.selected_proposals_checkboxes[checkbox_key], key=checkbox_key)
-            with col_id:
-                origen = "(Sesión Actual)" if proposal.get('is_session_proposal') else ""
-                st.write(f"**ID:** {proposal.get('proposal_id', 'N/A')} {origen}")
-            with col_emisor:
-                st.write(f"**Emisor:** {proposal.get('invoice_issuer_name', 'N/A')}")
-            with col_monto:
-                st.write(f"**Monto:** {proposal.get('invoice_currency', 'PEN')} {proposal.get('initial_disbursement', 0.0):,.2f}")
+    
 
-    # Botón para generar PDF consolidado
-    if 'accumulated_proposals' in st.session_state and st.session_state.accumulated_proposals:
-        if st.button("Generar PDF Consolidado"):
-            selected_invoices_data = []
-            for proposal in st.session_state.accumulated_proposals:
-                checkbox_key = f"accum_prop_checkbox_{proposal.get('proposal_id', 'MISSING_ID')}"
-                if st.session_state.selected_proposals_checkboxes.get(checkbox_key, False):
-                    # Si es una propuesta de sesión, ya tenemos todos los datos.
-                    # Si es de Supabase, necesitamos obtener los detalles completos (ya se hace en la búsqueda).
-                    selected_invoices_data.append(proposal)
-            
-            if selected_invoices_data:
-                import subprocess, json, time
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_filepath = f"C:/Users/rguti/Inandes.TECH/generated_pdfs/consolidated_invoice_{timestamp}.pdf"
-                invoices_json = json.dumps(selected_invoices_data)
-                command = [
-                    "python", "C:/Users/rguti/Inandes.TECH/backend/pdf_generator_v_cli.py",
-                    f"--output_filepath={output_filepath}", f"--invoices_json={invoices_json}"
-                ]
-                # ... (resto del código de generación de PDF sin cambios)
-                st.write("Generando PDF consolidado...")
-                try:
-                    result = subprocess.run(command, check=True, capture_output=True, text=True)
-                    if result.stderr: st.warning(f"Advertencias/Errores del generador de PDF: {result.stderr}")
-                    if os.path.exists(output_filepath):
-                        with open(output_filepath, "rb") as file:
-                            st.download_button(
-                                label="Descargar PDF Consolidado", data=file.read(),
-                                file_name=os.path.basename(output_filepath), mime="application/pdf"
-                            )
-                        st.success("PDF consolidado generado. Haz clic en el botón para descargarlo.")
-                        os.remove(output_filepath)
-                    else:
-                        st.error("Error: El archivo PDF consolidado no se generó correctamente.")
-                except subprocess.CalledProcessError as e:
-                    st.error(f"Error al generar PDF consolidado: {e}\nSalida del error: {e.stderr}")
-                except FileNotFoundError:
-                    st.error("Error: El script pdf_generator_v_cli.py no fue encontrado.")
-            else:
-                st.warning("No hay propuestas seleccionadas para generar el PDF.")
+    
+
+    # --- Conditional Bottom Tables ---
+    if data.get('imprimir_comision_afiliacion', False):
+        # --- Four columns of tables at the bottom ---
+        # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS
+        intereses_pactados_data = [
+            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph("<b>INTERES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in data.get('facturas', [])):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('igv_interes_calculado', 0) for inv in data.get('facturas', [])):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in data.get('facturas', [])) + sum(inv.get('igv_interes_calculado', 0) for inv in data.get('facturas', [])):,.2f}", styles['BoldSmallFontRight'])],
+        ]
+        intereses_pactados_table = Table(intereses_pactados_data, colWidths=[0.80625*inch, 0.80625*inch])
+        intereses_pactados_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (1,0), colors.lightgrey),
+            ('TEXTCOLOR', (0,0), (1,0), colors.blue),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,0), (1,0)),
+        ]))
+
+        # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN
+        comision_estructuracion_data = [
+            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+        ]
+        comision_estructuracion_table = Table(comision_estructuracion_data, colWidths=[0.80625*inch, 0.80625*inch])
+        comision_estructuracion_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (1,0), colors.lightgrey),
+            ('TEXTCOLOR', (0,0), (1,0), colors.blue),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,0), (1,0)),
+        ]))
+
+        # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE AFILIACION
+        comision_afiliacion_data = [
+            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE AFILIACION</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_afiliacion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_afiliacion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+        ]
+        comision_afiliacion_table = Table(comision_afiliacion_data, colWidths=[0.80625*inch, 0.80625*inch])
+        comision_afiliacion_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (1,0), colors.lightgrey),
+            ('TEXTCOLOR', (0,0), (1,0), colors.blue),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,0), (1,0)),
+        ]))
+
+        # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES
+        intereses_adicionales_data = [
+            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+        ]
+        intereses_adicionales_table = Table(intereses_adicionales_data, colWidths=[0.9675*inch, 0.645*inch])
+        intereses_adicionales_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (1,0), colors.lightgrey),
+            ('TEXTCOLOR', (0,0), (1,0), colors.blue),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,0), (1,0)),
+        ]))
+
+        # Combine these four tables into one main table for layout
+        bottom_tables_data = [
+            [intereses_pactados_table, Spacer(1, 0.3*inch), comision_estructuracion_table, Spacer(1, 0.3*inch), comision_afiliacion_table, Spacer(1, 0.3*inch), intereses_adicionales_table]
+        ]
+        bottom_tables = Table(bottom_tables_data, colWidths=[1.6125*inch, 0.3*inch, 1.6125*inch, 0.3*inch, 1.6125*inch, 0.3*inch, 1.6125*inch])
+        bottom_tables.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LEFTPADDING', (0,0), (-1,-1), 0),
+            ('RIGHTPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+        ]))
+        bottom_tables.hAlign = 'LEFT'
+        story.append(bottom_tables)
+    else:
+        # --- Three columns of tables at the bottom ---
+        # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS
+        intereses_pactados_data = [
+            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES PACTADOS</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph("<b>INTERES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in data.get('facturas', [])):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('igv_interes_calculado', 0) for inv in data.get('facturas', [])):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {sum(inv.get('interes_calculado', 0) for inv in data.get('facturas', [])) + sum(inv.get('igv_interes_calculado', 0) for inv in data.get('facturas', [])):,.2f}", styles['BoldSmallFontRight'])],
+        ]
+        intereses_pactados_table = Table(intereses_pactados_data, colWidths=[1*inch, 1*inch])
+        intereses_pactados_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (1,0), colors.lightgrey),
+            ('TEXTCOLOR', (0,0), (1,0), colors.blue),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,0), (1,0)),
+        ]))
+
+        # FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN
+        comision_estructuracion_data = [
+            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR COMISION DE ESTRUCTURACIÓN</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph("<b>COMISION</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion_monto_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_igv_comision_estructuracion_calculado', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_comision_estructuracion', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+        ]
+        comision_estructuracion_table = Table(comision_estructuracion_data, colWidths=[1*inch, 1*inch])
+        comision_estructuracion_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (1,0), colors.lightgrey),
+            ('TEXTCOLOR', (0,0), (1,0), colors.blue),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,0), (1,0)),
+        ]))
+
+        # FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES
+        intereses_adicionales_data = [
+            [Paragraph("<b>FACTURAR A MILENIO CONSULTORES SAC POR INTERESES ADICIONALES</b>", styles['BoldExtraSmallFontCenter'])],
+            [Paragraph("<b>INT ADICIONALES</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_int', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>IGV</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales_igv', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+            [Paragraph("<b>TOTAL</b>", styles['BoldSmallFont']), Paragraph(f"PEN {data.get('total_intereses_adicionales', 0.0):,.2f}", styles['BoldSmallFontRight'])],
+        ]
+        intereses_adicionales_table = Table(intereses_adicionales_data, colWidths=[1.2*inch, 0.8*inch])
+        intereses_adicionales_table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (1,0), colors.lightgrey),
+            ('TEXTCOLOR', (0,0), (1,0), colors.blue),
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 3),
+            ('TOPPADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,0), (1,0)),
+        ]))
+
+        # Combine these three tables into one main table for layout
+        bottom_tables_data = [
+            [intereses_pactados_table, Spacer(1, 0.675*inch), comision_estructuracion_table, Spacer(1, 0.675*inch), intereses_adicionales_table]
+        ]
+        bottom_tables = Table(bottom_tables_data, colWidths=[2*inch, 0.675*inch, 2*inch, 0.675*inch, 2*inch])
+        bottom_tables.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('LEFTPADDING', (0,0), (-1,-1), 0),
+            ('RIGHTPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+        ]))
+        bottom_tables.hAlign = 'LEFT'
+        story.append(bottom_tables)
+    story.append(Spacer(1, 0.1 * inch)) # Nueva fila adicional
+    story.append(Spacer(1, 0.2 * inch))
+
+        # --- Signatures Section ---
+    signature_line = Paragraph("_____________________________", styles['CenterAlign'])
+    signature_blocks = []
+    for sig_info in data.get('signatures', []):
+        sig_content = [
+            signature_line,
+            Spacer(1, 0.05*inch),
+            Paragraph(f"<b>{sig_info.get('name', '')}</b>", styles['BoldNormalCenter']),
+            Paragraph(f"DNI {sig_info.get('dni', '')}", styles['SmallFontCenter']),
+            Paragraph(sig_info.get('role', ''), styles['SmallFontCenter'])
+        ]
+        signature_blocks.append(sig_content)
+
+    # Arrange signatures in a 3x2 grid (3 columns, 2 rows)
+    # The middle cell of the first row is empty.
+    # Ensure we have at least 5 signature blocks for the layout, padding with empty strings if needed.
+    padded_signature_blocks = signature_blocks + [""] * (5 - len(signature_blocks))
+
+    signatures_data = [
+        [padded_signature_blocks[0], "", padded_signature_blocks[1]],
+        [padded_signature_blocks[2], padded_signature_blocks[3], padded_signature_blocks[4]]
+    ]
+
+    # Total width is ~7.5 inches (letter page width - 1 inch margins)
+    # Divide by 3 columns -> ~2.5 inches per column
+    col_width = (doc.width) / 3.0
+    signatures_table = Table(signatures_data, colWidths=[col_width, col_width, col_width])
+    signatures_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+        ('LEFTPADDING', (0,0), (-1,-1), 6),
+        ('RIGHTPADDING', (0,0), (-1,-1), 6),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+    ]))
+    story.append(signatures_table)
+
+    doc.build(story)
+
+    
+
+if __name__ == "__main__":
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description="Generate a PDF from factoring details.")
+    parser.add_argument("--output_filepath", required=True, help="The full path to save the output PDF.")
+    parser.add_argument("--json_filepath", required=True, help="The full path to the JSON file containing the invoice data.")
+    
+    args = parser.parse_args()
+
+    # Leer los datos desde el archivo JSON
+    with open(args.json_filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    output_dir = os.path.dirname(args.output_filepath)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Created output directory: {output_dir}")
+
+    try:
+        generate_pdf(args.output_filepath, data)
+        print(f"PDF generated successfully at: {args.output_filepath}")
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+
