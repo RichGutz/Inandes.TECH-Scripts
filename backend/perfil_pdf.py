@@ -1,5 +1,6 @@
-from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
@@ -9,9 +10,10 @@ import os
 import datetime
 
 def generate_perfil_pdf(output_filepath, invoice_data, print_date_str):
-    doc = SimpleDocTemplate(output_filepath, pagesize=letter, leftMargin=0.5*inch, rightMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+    doc = SimpleDocTemplate(output_filepath, pagesize=landscape(letter), leftMargin=0.5*inch, rightMargin=0.5*inch, topMargin=1.2*inch, bottomMargin=1*inch)
     styles = getSampleStyleSheet()
     story = []
+    logo_path = "C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png"
 
     # Custom styles
     styles.add(ParagraphStyle(name='RightAlign', alignment=TA_RIGHT))
@@ -31,12 +33,26 @@ def generate_perfil_pdf(output_filepath, invoice_data, print_date_str):
     styles.add(ParagraphStyle(name='SmallTinyFont', fontSize=5, leading=5))
     styles.add(ParagraphStyle(name='BoldExtraExtraSmallFontCenter', parent=styles['BoldSmallFont'], alignment=TA_CENTER, fontSize=5, textColor=colors.blue))
 
-    # Footer callback function
-    def footer_callback(canvas_obj, doc_obj):
-        canvas_obj.saveState()
-        canvas_obj.setFont('Helvetica', 8)
-        canvas_obj.drawString(inch, 0.75 * inch, f"Fecha de Impresión: {print_date_str}")
-        canvas_obj.restoreState()
+    # Header and Footer callback function
+    def header_and_footer(canvas, doc):
+        # Save the state to not interfere with the rest of the document
+        canvas.saveState()
+        
+        # Header
+        if os.path.exists(logo_path):
+            # Draw image on the top right. landscape(letter) is 11 x 8.5 inches.
+            # Page width is doc.width + doc.leftMargin + doc.rightMargin
+            page_width = doc.width + doc.leftMargin + doc.rightMargin
+            # Draw on the right side of the page
+            canvas.drawImage(logo_path, page_width - doc.rightMargin - 1*inch, doc.height + 0.5*inch, 
+                           width=1*inch, height=1*inch, preserveAspectRatio=True, mask='auto')
+
+        # Footer
+        canvas.setFont('Helvetica', 8)
+        canvas.drawString(doc.leftMargin, 0.75 * inch, f"Fecha de Impresión: {print_date_str}")
+        
+        # Restore the canvas state
+        canvas.restoreState()
 
     # Title
     story.append(Paragraph("Perfil de la Operación", styles['h2']))
@@ -121,7 +137,7 @@ def generate_perfil_pdf(output_filepath, invoice_data, print_date_str):
     ]))
     story.append(table)
 
-    doc.build(story, onFirstPage=footer_callback, onLaterPages=footer_callback)
+    doc.build(story, onFirstPage=header_and_footer, onLaterPages=header_and_footer)
 
 if __name__ == "__main__":
     import argparse
@@ -133,7 +149,12 @@ if __name__ == "__main__":
     parser.add_argument("--print_date", required=True, help="Date of printing in string format.")
     args = parser.parse_args()
 
-    invoice_data = json.loads(args.invoice_json)
+    try:
+        invoice_data = json.loads(args.invoice_json)
+    except json.JSONDecodeError as e:
+        print(f"Error decodificando JSON: {e}")
+        print(f"JSON recibido: {args.invoice_json}")
+        exit(1)
     print_date_str = args.print_date
 
     output_dir = os.path.dirname(args.output_filepath)
