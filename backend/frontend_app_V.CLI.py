@@ -97,18 +97,25 @@ def flatten_db_proposal(proposal):
     Flattens the nested JSON from a database proposal to match the structure
     of a session-calculated proposal for PDF generation.
     """
+    print(f"--- [DEBUG] flatten_db_proposal: Initial proposal keys: {proposal.keys()} ---")
+    print(f"--- [DEBUG] flatten_db_proposal: Initial invoice_net_amount: {proposal.get('invoice_net_amount')} ---")
+    print(f"--- [DEBUG] flatten_db_proposal: Initial advance_rate: {proposal.get('advance_rate')} ---")
+
     recalc_result = proposal.get('recalculate_result', {})
 
     # --- ROBUSTNESS FIX: Ensure recalc_result is a dictionary ---
     if isinstance(recalc_result, str):
         try:
             recalc_result = json.loads(recalc_result)
+            print(f"--- [DEBUG] flatten_db_proposal: Parsed recalc_result from string. ---")
         except json.JSONDecodeError:
             recalc_result = {}
+            print(f"--- [DEBUG] flatten_db_proposal: Failed to parse recalc_result string. ---")
     # --- END FIX ---
 
     desglose = recalc_result.get('desglose_final_detallado', {})
     calculos = recalc_result.get('calculo_con_tasa_encontrada', {})
+    busqueda = recalc_result.get('resultado_busqueda', {})
     
     # Add top-level keys that the PDF generator expects
     proposal['advance_amount'] = calculos.get('capital', 0)
@@ -127,7 +134,16 @@ def flatten_db_proposal(proposal):
     proposal['invoice_number'] = proposal.get('invoice_number', 'N/A')
     proposal['invoice_series_and_number'] = proposal.get('invoice_series_and_number', 'N/A')
     proposal['invoice_total_amount'] = proposal.get('invoice_total_amount', 0)
-    proposal['invoice_net_amount'] = proposal.get('invoice_net_amount', 0)
+    # Correctly extract invoice_net_amount from nested structure if not present at top level
+    if 'invoice_net_amount' not in proposal or proposal['invoice_net_amount'] == 0:
+        proposal['invoice_net_amount'] = recalc_result.get('calculo_con_tasa_encontrada', {}).get('mfn', 0.0)
+        print(f"--- [DEBUG] flatten_db_proposal: Updated invoice_net_amount to {proposal['invoice_net_amount']} ---")
+    
+    # Ensure advance_rate is correctly extracted and scaled
+    if 'advance_rate' not in proposal or proposal['advance_rate'] == 0:
+        proposal['advance_rate'] = recalc_result.get('resultado_busqueda', {}).get('tasa_avance_encontrada', 0) * 100
+        print(f"--- [DEBUG] flatten_db_proposal: Updated advance_rate to {proposal['advance_rate']} ---")
+
     proposal['invoice_currency'] = proposal.get('invoice_currency', 'PEN')
     proposal['invoice_issue_date'] = proposal.get('invoice_issue_date', 'N/A')
     proposal['credit_term_days'] = proposal.get('credit_term_days', 0)
@@ -138,6 +154,8 @@ def flatten_db_proposal(proposal):
     proposal['financing_term_days'] = proposal.get('financing_term_days', 0)
     proposal['detraccion_percentage'] = proposal.get('detraccion_percentage', 0)
     
+    print(f"--- [DEBUG] flatten_db_proposal: Final invoice_net_amount: {proposal.get('invoice_net_amount')} ---")
+    print(f"--- [DEBUG] flatten_db_proposal: Final advance_rate: {proposal.get('advance_rate')} ---")
     return proposal
 
 def propagate_commission_changes():
@@ -910,8 +928,9 @@ with col_consulta:
                     'document_date': datetime.datetime.now().strftime("%A %d, %B, %Y").upper(),
                     'facturas': selected_invoices_data,
                     'total_monto_neto': sum(inv.get('invoice_net_amount', 0) for inv in selected_invoices_data),
-                    'detracciones_total': sum(inv.get('invoice_total_amount', 0) * (inv.get('detraccion_percentage', 0) / 100) for inv in selected_invoices_data),
-                    'total_neto': sum(inv.get('invoice_net_amount', 0) for inv in selected_invoices_data) - sum(inv.get('invoice_total_amount', 0) * (inv.get('detraccion_percentage', 0) / 100) for inv in selected_invoices_data),
+                    'total_invoice_total_amount': sum(inv.get('invoice_total_amount', 0) for inv in selected_invoices_data),
+                    'detracciones_total': sum(inv.get('invoice_total_amount', 0) - inv.get('invoice_net_amount', 0) for inv in selected_invoices_data),
+                    'total_neto': sum(inv.get('invoice_net_amount', 0) for inv in selected_invoices_data),
                     'total_capital_calculado': sum(inv.get('advance_amount', 0) for inv in selected_invoices_data),
                     'total_interes_calculado': sum(inv.get('interes_calculado', 0) for inv in selected_invoices_data),
                     'total_igv_interes_calculado': sum(inv.get('igv_interes_calculado', 0) for inv in selected_invoices_data),
@@ -920,14 +939,16 @@ with col_consulta:
                     'total_comision_estructuracion_monto_calculado': sum(inv.get('commission_amount', 0) for inv in selected_invoices_data),
                     'total_igv_comision_estructuracion_calculado': sum(inv.get('commission_amount', 0) for inv in selected_invoices_data) * 0.18,
                     'total_comision_estructuracion': sum(inv.get('commission_amount', 0) for inv in selected_invoices_data) * 1.18,
-                    'total_a_depositar': sum(inv.get('initial_disbursement', 0) for inv in selected_invoices_data) - sum(inv.get('commission_amount', 0) for inv in selected_invoices_data),
+                    'total_a_depositar': sum(inv.get('initial_disbursement', 0) for inv in selected_invoices_data),
                     'imprimir_comision_afiliacion': any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data),
                     'total_comision_afiliacion_monto_calculado': selected_invoices_data[0].get('affiliation_commission_pen', 0) if selected_invoices_data else 0,
                     'total_igv_afiliacion_calculado': (selected_invoices_data[0].get('affiliation_commission_pen', 0) * 0.18) if any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data) else 0,
                     'total_comision_afiliacion': (selected_invoices_data[0].get('affiliation_commission_pen', 0) * 1.18) if any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data) else 0,
+                    'total_commissions_and_igv': (sum(inv.get('commission_amount', 0) for inv in selected_invoices_data) * 1.18) + ((selected_invoices_data[0].get('affiliation_commission_pen', 0) * 1.18) if any(inv.get('apply_affiliation_commission', False) for inv in selected_invoices_data) else 0),
                     'total_intereses_adicionales_int': 0.0,
                     'total_intereses_adicionales_igv': 0.0,
                     'total_intereses_adicionales': 0.0,
+                    'total_abono_for_pdf_display': sum((inv.get('invoice_net_amount', 0.0) * (inv.get('advance_rate', 0.0) / 100)) - inv.get('interes_calculado', 0.0) - inv.get('igv_interes_calculado', 0.0) for inv in selected_invoices_data),
                     'signatures': []
                 }
 
@@ -943,10 +964,6 @@ with col_consulta:
                 with open(temp_json_path, 'w', encoding='utf-8') as f:
                     json.dump(final_data_for_pdf, f, ensure_ascii=False, indent=4)
 
-                print("--- [DEBUG] DATOS ENVIADOS DESDE FRONTEND --- ")
-                print(json.dumps(final_data_for_pdf, indent=4, ensure_ascii=False))
-                print("--------------------------------------------")
-
                 command = [
                     "python", "C:/Users/rguti/Inandes.TECH/backend/pdf_generator_v_cli.py",
                     f"--output_filepath={output_filepath}",
@@ -959,11 +976,10 @@ with col_consulta:
                     result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
 
                     # Imprimir siempre la salida estándar y el error estándar para depuración
-                    print("---[ Salida del Generador de PDF ]---")
-                    print(result.stdout)
-                    print("---[ Errores del Generador de PDF ]---")
-                    print(result.stderr)
-                    print("-------------------------------------")
+                    if result.stdout:
+                        st.warning(f"Salida del generador de PDF: {result.stdout}")
+                    if result.stderr:
+                        st.error(f"Errores del generador de PDF: {result.stderr}")
 
                     if result.returncode != 0 or not os.path.exists(output_filepath):
                         st.error("Error: El archivo PDF consolidado no se generó correctamente. Revisa la consola para ver los detalles.")
