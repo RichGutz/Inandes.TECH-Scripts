@@ -225,11 +225,11 @@ st.markdown("""
 
 col1, col2, col3 = st.columns([0.25, 0.5, 0.25])
 with col1:
-    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/logo.geek.png", width=200)
+    st.image("C:/Users/rguti/Inandes.TECH - 08.08.00.AM/inputs_para_generated_pdfs/logo.geek.png", width=200)
 with col2:
     st.markdown("<h2 style='text-align: center; font-size: 2.4em;'>Modulo Operaciones de Factoring</h2>", unsafe_allow_html=True)
 with col3:
-    st.image("C:/Users/rguti/Inandes.TECH/inputs_para_generated_pdfs/LOGO.png", width=150)
+    st.image("C:/Users/rguti/Inandes.TECH - 08.08.00.AM/inputs_para_generated_pdfs/LOGO.png", width=150)
 
 # --- UI: Carga de Archivos ---
 with st.expander("", expanded=True):
@@ -715,56 +715,113 @@ with col_paso3:
         else:
             st.warning("No hay resultados de cálculo para guardar.")
 
-    # New button for printing individual profiles
+    # Container for the print buttons
     can_print_profiles = any(invoice.get('recalculate_result') for invoice in st.session_state.invoices_data)
-    if st.button("Imprimir Perfiles", disabled=not can_print_profiles):
-        if can_print_profiles:
-            st.write("Generando PDFs de perfiles individuales...")
-            generated_pdf_paths = []
-            for idx, invoice in enumerate(st.session_state.invoices_data):
-                if invoice.get('recalculate_result'):
+    
+    col_print_pdf, col_print_html = st.columns(2)
+
+    with col_print_pdf:
+        if st.button("Imprimir Perfiles (PDF)", disabled=not can_print_profiles):
+            if can_print_profiles:
+                st.write("Generando PDFs de perfiles individuales...")
+                generated_pdf_paths = []
+                for idx, invoice in enumerate(st.session_state.invoices_data):
+                    if invoice.get('recalculate_result'):
+                        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        output_filename = f"perfil_factura_{invoice.get('numero_factura', idx+1)}_{timestamp}.pdf"
+                        output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", output_filename)
+
+                        invoice_json = json.dumps(invoice)
+                        print_date = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+
+                        command = [
+                            "python", "C:/Users/rguti/Inandes.TECH/backend/perfil_pdf.py",
+                            f"--output_filepath={output_filepath}",
+                            f"--invoice_json={invoice_json}",
+                            f"--print_date={print_date}"
+                        ]
+                        try:
+                            result = subprocess.run(command, check=True, capture_output=True, encoding='cp1252')
+                            if result.stderr:
+                                st.warning(f"Advertencias/Errores del generador de perfil PDF para {invoice.get('numero_factura', '')}: {result.stderr}")
+                            if os.path.exists(output_filepath):
+                                generated_pdf_paths.append(output_filepath)
+                                st.success(f"Perfil PDF para Factura {invoice.get('numero_factura', '')} generado.")
+                            else:
+                                st.error(f"Error: El perfil PDF para Factura {invoice.get('numero_factura', '')} no se generó correctamente.")
+                        except subprocess.CalledProcessError as e:
+                            st.error(f"Error al generar perfil PDF para Factura {invoice.get('numero_factura', '')}: {e}\nSalida del error: {e.stderr}")
+                        except FileNotFoundError:
+                            st.error("Error: El script perfil_pdf.py no fue encontrado.")
+                
+                if generated_pdf_paths:
+                    st.success("Todos los perfiles PDF generados. Puedes descargarlos a continuación:")
+                    for pdf_path in generated_pdf_paths:
+                        with open(pdf_path, "rb") as file:
+                            st.download_button(
+                                label=f"Descargar {os.path.basename(pdf_path)}",
+                                data=file.read(),
+                                file_name=os.path.basename(pdf_path),
+                                mime="application/pdf",
+                                key=f"download_{os.path.basename(pdf_path)}"
+                            )
+                        os.remove(pdf_path)
+                else:
+                    st.warning("No se generaron perfiles PDF. Asegúrate de que haya facturas calculadas.")
+            else:
+                st.warning("No hay resultados de cálculo para generar perfiles PDF.")
+
+    with col_print_html:
+        if st.button("Imprimir Perfiles (PDF con Jinja2)", disabled=not can_print_profiles):
+            if can_print_profiles:
+                st.write("Generando PDF consolidado de perfiles con Jinja2...")
+                
+                invoices_to_print = []
+                for invoice in st.session_state.invoices_data:
+                    if invoice.get('recalculate_result'):
+                        invoices_to_print.append(invoice)
+
+                if invoices_to_print:
                     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    output_filename = f"perfil_factura_{invoice.get('numero_factura', idx+1)}_{timestamp}.pdf"
+                    output_filename = f"perfiles_consolidados_{timestamp}.pdf"
                     output_filepath = os.path.join("C:/Users/rguti/Inandes.TECH/generated_pdfs", output_filename)
 
-                    invoice_json = json.dumps(invoice)
+                    invoices_json = json.dumps(invoices_to_print)
                     print_date = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
 
                     command = [
-                        "python", "C:/Users/rguti/Inandes.TECH/backend/perfil_pdf.py",
+                        "python", "C:/Users/rguti/Inandes.TECH/backend/html_generator_for_perfil.py",
                         f"--output_filepath={output_filepath}",
-                        f"--invoice_json={invoice_json}",
+                        f"--invoices_json={invoices_json}",
                         f"--print_date={print_date}"
                     ]
                     try:
-                        result = subprocess.run(command, check=True, capture_output=True, text=True)
+                        result = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
                         if result.stderr:
-                            st.warning(f"Advertencias/Errores del generador de perfil PDF para {invoice.get('numero_factura', '')}: {result.stderr}")
+                            st.warning(f"Advertencias/Errores del generador de PDF: {result.stderr}")
+                        
                         if os.path.exists(output_filepath):
-                            generated_pdf_paths.append(output_filepath)
-                            st.success(f"Perfil PDF para Factura {invoice.get('numero_factura', '')} generado.")
+                            st.success(f"PDF consolidado generado: {output_filename}")
+                            with open(output_filepath, "rb") as file:
+                                st.download_button(
+                                    label=f"Descargar {output_filename}",
+                                    data=file.read(),
+                                    file_name=output_filename,
+                                    mime="application/pdf",
+                                    key=f"download_{output_filename}"
+                                )
+                            os.remove(output_filepath)
                         else:
-                            st.error(f"Error: El perfil PDF para Factura {invoice.get('numero_factura', '')} no se generó correctamente.")
+                            st.error(f"Error: El PDF consolidado no se generó correctamente. Salida: {result.stdout}")
+
                     except subprocess.CalledProcessError as e:
-                        st.error(f"Error al generar perfil PDF para Factura {invoice.get('numero_factura', '')}: {e}\nSalida del error: {e.stderr}")
+                        st.error(f"Error al generar el PDF consolidado: {e}\nSalida del error: {e.stderr}")
                     except FileNotFoundError:
-                        st.error("Error: El script perfil_pdf.py no fue encontrado.")
-            
-            if generated_pdf_paths:
-                st.success("Todos los perfiles PDF generados. Puedes descargarlos a continuación:")
-                for pdf_path in generated_pdf_paths:
-                    with open(pdf_path, "rb") as file:
-                        st.download_button(
-                            label=f"Descargar {os.path.basename(pdf_path)}",
-                            data=file.read(),
-                            file_name=os.path.basename(pdf_path),
-                            mime="application/pdf"
-                        )
-                    os.remove(pdf_path)
+                        st.error("Error: El script html_generator_for_perfil.py no fue encontrado.")
+                else:
+                    st.warning("No hay perfiles calculados para imprimir.")
             else:
-                st.warning("No se generaron perfiles PDF. Asegúrate de que haya facturas calculadas.")
-        else:
-            st.warning("No hay resultados de cálculo para generar perfiles PDF.")
+                st.warning("No hay resultados de cálculo para generar perfiles.")
 
 with col_consulta:
     st.write("#### Consulta y Generación de PDF")
@@ -965,15 +1022,16 @@ with col_consulta:
                     json.dump(final_data_for_pdf, f, ensure_ascii=False, indent=4)
 
                 command = [
-                    "python", "C:/Users/rguti/Inandes.TECH/backend/pdf_generator_v_cli.py",
-                    f"--output_filepath={output_filepath}",
-                    f"--json_filepath={temp_json_path}"
+                    "python", "C:/Users/rguti/Adicionales.Inandes.HTML/html_generator_V6.py",
+                    f"--output_file={output_filepath}",
+                    f"--data_file={temp_json_path}",
+                    "--template=plantilla_factura_V6.html"
                 ]
                 # ... (resto del código de generación de PDF sin cambios)
                 st.write("Generando PDF consolidado...")
                 try:
                     # Ejecutar el script y capturar la salida para depuración
-                    result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8')
+                    result = subprocess.run(command, capture_output=True, text=True, encoding='cp1252')
 
                     # Imprimir siempre la salida estándar y el error estándar para depuración
                     if result.stdout:
@@ -994,7 +1052,7 @@ with col_consulta:
                         os.remove(output_filepath)
 
                 except FileNotFoundError:
-                    st.error("Error: El script pdf_generator_v_cli.py no fue encontrado.")
+                    st.error("Error: El script html_generator_V6.py no fue encontrado.")
                 except Exception as e:
                     st.error(f"Ocurrió un error inesperado: {e}")
             else:

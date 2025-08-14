@@ -111,8 +111,8 @@ def get_razon_social_by_ruc(ruc: str) -> str:
         response = supabase.table('EMISORES.DEUDORES').select('"Razon Social"').eq('RUC', ruc).single().execute()
         if response.data:
             return response.data.get('Razon Social', '')
-    except Exception:
-        pass # Falla silenciosamente si no se encuentra
+    except Exception as e:
+        print(f"[ERROR en get_razon_social_by_ruc]: {e}")
     return ""
 
 def save_proposal(session_data: dict) -> tuple[bool, str]:
